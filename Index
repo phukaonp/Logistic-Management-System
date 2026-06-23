@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="th">
+  <head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <style>
+      :root{
+        --bg:#f4f6fb; --card:#fff; --line:#dfe4ec; --ink:#1f2937; --muted:#6b7280;
+        --brand:#2563eb; --brand-dark:#1d4ed8; --ok:#16a34a; --okbg:#ecfdf5; --err:#dc2626;
+        --ro-bg:#f3f5f9; --ro-ink:#475569; --dirty:#fff8e1; --dirty-line:#f0c000; --head:#1e293b;
+      }
+      *{box-sizing:border-box}
+      html,body{height:100%}
+      body{margin:0;background:var(--bg);color:var(--ink);font-family:"Segoe UI","Sarabun",system-ui,-apple-system,sans-serif;font-size:13px}
+      .app{display:flex;flex-direction:column;height:100vh}
+
+      .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 14px;background:var(--card);border-bottom:1px solid var(--line)}
+      .toolbar h1{font-size:16px;margin:0 6px 0 0;display:flex;align-items:center}
+      .count{font-size:12px;color:var(--muted)}
+      .spacer{flex:1}
+      button{font-family:inherit}
+      .ic{display:block}
+      .hicon{display:inline-block;vertical-align:-4px;margin-right:7px;color:var(--ink)}
+      .icon-btn{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);cursor:pointer;padding:0}
+      .icon-btn:hover{background:#f1f5f9}
+      .icon-btn:active{transform:scale(.96)}
+      .icon-btn.active{background:var(--brand);color:#fff;border-color:var(--brand)}
+      .icon-btn.spinning .ic{animation:imgspin .8s linear infinite}
+      .status-icon{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;color:var(--muted)}
+
+      .search-wrap{position:relative;flex:1;min-width:170px;max-width:330px}
+      .search{padding:8px 12px;font-size:13px;border:1px solid var(--line);border-radius:8px;outline:none;width:100%;padding-left:32px;padding-right:30px}
+      .search:focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+      .search-icon{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--muted);display:inline-flex;pointer-events:none}
+      .search-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--muted);font-size:18px;line-height:1;display:none;padding:2px 5px}
+      .search-clear.show{display:block}
+      .search-clear:hover{color:var(--err)}
+      .filter-sel{font-size:13px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);width:170px}
+      .filter-sel:focus{border-color:var(--brand);outline:none}
+      .msg{font-size:12px;padding:6px 10px;border-radius:7px;display:none}
+      .msg.show{display:inline-block}
+      .msg.ok{background:var(--okbg);color:var(--ok)}
+      .msg.err{background:#fef2f2;color:var(--err)}
+
+      .table-wrap{flex:1;overflow:auto;position:relative;-webkit-overflow-scrolling:touch}
+      table{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%}
+      th,td{border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:0;white-space:nowrap;vertical-align:middle}
+      thead th{position:sticky;top:0;z-index:3;background:var(--head);color:#fff;font-weight:600;font-size:12px;padding:8px 10px;text-align:left;overflow:hidden}
+      thead th .sub{display:block;font-weight:400;opacity:.7;font-size:10px}
+      td .cell{padding:6px 9px;display:block;min-height:30px;line-height:18px;overflow:hidden;text-overflow:ellipsis}
+      td.ro{background:var(--ro-bg);color:var(--ro-ink)}
+      td.ro .cell{max-width:100%}
+      td.edit input{width:100%;min-width:0;border:none;background:transparent;font:inherit;color:var(--ink);padding:6px 9px;outline:none}
+      td.edit{background:#fff}
+      td.edit:focus-within{box-shadow:inset 0 0 0 2px var(--brand)}
+      td.edit.narrow input{text-align:right}
+
+      tr.dirty td.edit{background:var(--dirty)}
+      tr.dirty td:first-child{box-shadow:inset 3px 0 0 var(--dirty-line)}
+      tr.saving td:first-child{box-shadow:inset 3px 0 0 var(--brand)}
+      tr.saved td:first-child{box-shadow:inset 3px 0 0 var(--ok)}
+      tr.saved td.edit{background:var(--okbg);transition:background .4s}
+      tbody tr:hover td.ro{background:#eaeef5}
+
+      th.idx,td.idx{width:44px;min-width:44px;max-width:44px;padding:6px 6px;background:var(--ro-bg);text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+
+      /* คอลัมน์ choice (MainDept/SubDept/MainCat) */
+      td.choice-cell{cursor:pointer}
+      .choice-display{padding:5px 9px;min-height:30px;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+      td.choice-cell:hover .choice-display{background:#f8fafc}
+      .choice-display .ph{color:#9aa3b2}
+      .chip{background:#eef2ff;color:#3730a3;border-radius:999px;padding:2px 8px;font-size:11px;white-space:nowrap;display:inline-flex;align-items:center;gap:3px}
+      .chip-x{display:none;cursor:pointer;font-weight:700;line-height:1;opacity:.65;padding:0 1px}
+      .chip:hover .chip-x{display:inline}
+      .chip-x:hover{opacity:1;color:var(--err)}
+      .choice-popup{position:fixed;z-index:50;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 26px rgba(16,24,40,.18);padding:6px;min-width:200px;max-height:60vh;overflow:auto}
+      .choice-popup.hide{display:none}
+      .choice-popup label{display:flex;align-items:center;gap:9px;padding:9px 9px;border-radius:7px;cursor:pointer;font-size:13px}
+      .choice-popup label:hover{background:#f1f5ff}
+      .choice-popup input{width:18px;height:18px;margin:0}
+      .choice-popup .opt{padding:9px 10px;border-radius:7px;cursor:pointer;font-size:13px}
+      .choice-popup .opt:hover{background:#f1f5ff}
+      .choice-popup .opt.sel{background:#eef2ff;color:#3730a3;font-weight:600}
+
+      /* รูปภาพ */
+      td.img-cell{cursor:pointer}
+      .img-display{display:flex;align-items:center;gap:6px;padding:4px 8px;min-height:30px}
+      td.img-cell:hover .img-display{background:#f8fafc}
+      .img-thumb{height:38px;width:auto;max-width:90px;border-radius:6px;border:1px solid var(--line);object-fit:cover;display:block}
+      .img-add{color:var(--muted);font-size:12px;display:inline-flex;align-items:center;gap:5px}
+      .img-add .ic{width:18px;height:18px}
+      .img-spin{display:inline-block;width:18px;height:18px;border:2px solid #c7d2fe;border-top-color:var(--brand);border-radius:50%;animation:imgspin .7s linear infinite}
+      @keyframes imgspin{to{transform:rotate(360deg)}}
+      .img-uptxt{font-size:12px;color:var(--muted);margin-left:6px}
+      .img-x{display:none;cursor:pointer;font-weight:700;color:#9aa3b2;font-size:15px;line-height:1}
+      .img-display:hover .img-x{display:inline}
+      .img-x:hover{color:var(--err)}
+
+      /* tooltip ชื่อเต็ม */
+      td.name-cell{cursor:pointer;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+      .cell-tip{position:fixed;z-index:60;max-width:340px;background:#1e293b;color:#fff;font-size:13px;padding:8px 11px;border-radius:8px;box-shadow:0 6px 22px rgba(0,0,0,.3);display:none;line-height:1.45}
+      .cell-tip.show{display:block}
+
+      /* คอลัมน์รวม (โหมดยุบ) */
+      .combo-col{display:none}
+      #grid.mode-collapsed .combo-col{display:table-cell}
+      #grid.mode-collapsed .col-cde{display:none}
+      td.combo-col{background:var(--ro-bg);vertical-align:top;white-space:normal}
+      .combo{padding:7px 10px;min-width:0;overflow:hidden}
+      .combo-code{font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--muted)}
+      .combo-sub{font-size:12px;color:var(--muted);margin-top:1px}
+      .combo-name{font-size:16px;font-weight:600;color:var(--ink);margin-top:2px;line-height:1.3;white-space:normal}
+
+      /* ปรับความกว้างคอลัมน์ */
+      .col-resizer{position:absolute;top:0;right:0;width:8px;height:100%;cursor:col-resize;z-index:5;touch-action:none}
+      .col-resizer:hover{background:rgba(37,99,235,.35)}
+      body.col-resizing-active{cursor:col-resize;-webkit-user-select:none;user-select:none}
+      #grid.selecting .col-resizer{display:none}
+      #grid.selecting thead th{cursor:pointer}
+      #grid.selecting thead th:hover{background:#33415a}
+      #grid thead th.col-selected{box-shadow:inset 0 -3px 0 var(--brand)}
+      .size-panel{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:70;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.2);padding:13px 15px;width:320px;max-width:92vw}
+      .size-panel.hide{display:none}
+      .sp-head{font-size:14px;margin-bottom:11px}
+      .sp-head b{color:var(--brand)}
+      .sp-presets{display:flex;gap:8px;margin-bottom:11px}
+      .sp-presets button{flex:1;font-family:inherit;font-size:13px;padding:10px 0;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer}
+      .sp-presets button:hover{background:#f1f5f9}
+      .size-panel input[type=range]{width:100%}
+      .sp-foot{display:flex;align-items:center;justify-content:space-between;margin-top:11px}
+      .sp-foot span{font-size:13px;color:var(--muted)}
+      .sp-done{font-family:inherit;font-size:14px;padding:9px 20px;border:none;border-radius:8px;background:var(--brand);color:#fff;font-weight:600;cursor:pointer}
+
+      .loading{padding:40px;text-align:center;color:var(--muted)}
+      .hide{display:none !important}
+
+      /* ปุ่มเพิ่มรายการ (ลอยมุมขวาล่าง) */
+      .fab{position:fixed;right:18px;bottom:18px;z-index:40;display:inline-flex;align-items:center;justify-content:center;width:52px;height:52px;background:var(--brand);color:#fff;border:none;border-radius:50%;cursor:pointer;box-shadow:0 6px 20px rgba(37,99,235,.4);font-family:inherit}
+      .fab:hover{background:var(--brand-dark)}
+      .fab:active{transform:scale(.95)}
+      .fab:disabled{opacity:.6}
+      .fab .ic{width:26px;height:26px}
+      /* แถวที่เพิ่มใหม่ + ปุ่มลบที่คอลัมน์ No. */
+      tr.new-row td.idx{background:#fde047;color:#713f12;font-weight:600}
+      td.idx-new{cursor:pointer}
+      .idx-del{display:none;color:var(--err);align-items:center;justify-content:center}
+      .idx-del .ic{width:16px;height:16px}
+      tr:hover td.idx-new .idx-no{display:none}
+      tr:hover td.idx-new .idx-del{display:inline-flex}
+      .visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+      #grid tbody tr{content-visibility:auto;contain-intrinsic-size:auto 42px}
+      @media (hover:none){ .chip-x,.img-x{display:inline !important} }
+      @media (max-width:1100px),(hover:none){
+        body{font-size:14px}
+        td .cell{padding:9px 10px;min-height:42px;line-height:22px}
+        td.edit input{padding:10px;font-size:16px}
+        .choice-display{min-height:42px;padding:8px 10px}
+        .img-display{min-height:42px}.img-thumb{height:48px;max-width:120px}
+        .chip{font-size:13px;padding:5px 10px}.chip-x{font-size:18px;padding:0 5px}.img-x{font-size:22px;padding:0 8px}
+        thead th{padding:10px}
+        .choice-popup{min-width:240px}.choice-popup label,.choice-popup .opt{padding:12px}.choice-popup input{width:20px;height:20px}
+        /* Header: บรรทัดเดียว + กล่องสูงเท่ากัน 40px */
+        .toolbar{flex-wrap:nowrap;overflow-x:auto;gap:8px;padding:8px 10px}
+        .toolbar h1{font-size:15px;margin:0;height:40px;flex:0 0 auto;white-space:nowrap}
+        .toolbar h1 .hicon{margin-right:6px}
+        .toolbar .icon-btn,.toolbar .status-icon{width:40px;height:40px;flex:0 0 auto}
+        .search-wrap{flex:1 0 150px;min-width:130px;max-width:230px}
+        .toolbar .search{height:40px;font-size:16px}
+        .toolbar .filter-sel{height:40px;width:150px;flex:0 0 auto}
+        .count{flex:0 0 auto;white-space:nowrap;margin-left:auto}
+        .spacer{display:none}
+        /* ปุ่ม refresh ดันไปขวาสุด + ตรึงเมื่อเลื่อน */
+        .toolbar #refreshBtn{position:sticky;right:0;z-index:3;box-shadow:-10px 0 10px -8px rgba(0,0,0,.18)}
+      }
+    </style>
+    <style id="colStyle"></style>
+  </head>
+  <body>
+    <div class="app">
+      <div class="toolbar">
+        <h1><svg class="ic hicon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3.3 7.5L12 12.5l8.7-5M12 12.5V22"/></svg>BPI Product Data</h1>
+        <span id="saveStatus" class="status-icon" title="บันทึกอัตโนมัติ"></span>
+        <button id="viewToggle" class="icon-btn" type="button" title="สลับมุมมอง ยุบ/กลาง"></button>
+        <button id="resizeToggle" class="icon-btn" type="button" title="โหมดปรับความกว้างคอลัมน์ (สำหรับแท็บเล็ต)"><svg class="ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 7l-4 5 4 5"/><path d="M16 7l4 5-4 5"/><path d="M4 12h16"/></svg></button>
+        <div class="search-wrap">
+          <span class="search-icon"><svg class="ic" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.4-3.4"/></svg></span>
+          <input id="search" class="search" type="text" placeholder="ค้นหา Code / ชื่อ / หมวด…" disabled>
+          <span id="searchClear" class="search-clear" title="ล้าง">×</span>
+        </div>
+        <select id="filterDept" class="filter-sel" disabled><option value="">แผนก: ทั้งหมด</option></select>
+        <select id="filterCat" class="filter-sel" disabled><option value="">หมวด: ทั้งหมด</option></select>
+        <select id="filterSubCat" class="filter-sel" disabled><option value="">SubCat: ทั้งหมด</option></select>
+        <span class="count" id="count"></span>
+        <span class="spacer"></span>
+        <span class="msg" id="msg"></span>
+        <button id="refreshBtn" class="icon-btn" type="button" title="รีเฟรชข้อมูล"><svg class="ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 1 13.6-5.7"/><path d="M18 3v4h-4"/><path d="M20 12a8 8 0 0 1-13.6 5.7"/><path d="M6 21v-4h4"/></svg></button>
+      </div>
+
+      <div class="table-wrap">
+        <div id="loading" class="loading">⏳ กำลังโหลดข้อมูล…</div>
+        <table id="grid" class="hide mode-collapsed">
+          <thead>
+            <tr>
+              <th class="idx">No.</th>
+              <th class="combo-col">ข้อมูลวัสดุ<span class="sub">B · F · G</span></th>
+              <th class="code-col col-cde">Material Code<span class="sub">B</span></th>
+              <th>MainDept<span class="sub">C · กรอกได้</span></th>
+              <th>SubDept<span class="sub">D · หลายค่า</span></th>
+              <th>MainCat<span class="sub">E · กรอกได้</span></th>
+              <th class="col-cde">SubCat<span class="sub">F</span></th>
+              <th class="col-cde">Material Name (1)<span class="sub">G</span></th>
+              <th>Material Name (2)<span class="sub">H · กรอกได้</span></th>
+              <th>Image<span class="sub">I · กรอกได้</span></th>
+              <th>Spec<span class="sub">J · กรอกได้</span></th>
+              <th>Brand<span class="sub">K · กรอกได้</span></th>
+              <th>น้ำหนัก/ชิ้น<span class="sub">L · Kg</span></th>
+              <th>กว้าง<span class="sub">M · mm</span></th>
+              <th>ยาว<span class="sub">N · mm</span></th>
+              <th>สูง<span class="sub">O · mm</span></th>
+              <th>หน่วยเก็บ<span class="sub">P · IC</span></th>
+              <th>หน่วยซื้อ<span class="sub">Q · PO</span></th>
+              <th>Note<span class="sub">R · กรอกได้</span></th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <button id="addRowBtn" class="fab" type="button" title="เพิ่มรายการใหม่"></button>
+    <div id="choicePopup" class="choice-popup hide"></div>
+    <div id="cellTip" class="cell-tip"></div>
+    <input id="imgFile" type="file" accept="image/*" class="visually-hidden">
+    <div id="sizePanel" class="size-panel hide">
+      <div class="sp-head">ปรับขนาด: <b id="spName"></b></div>
+      <div class="sp-presets"><button type="button" data-w="90">เล็ก</button><button type="button" data-w="160">กลาง</button><button type="button" data-w="280">ใหญ่</button></div>
+      <input type="range" id="spRange" min="40" max="500" step="5">
+      <div class="sp-foot"><span id="spVal"></span><button type="button" id="spClose" class="sp-done">เสร็จ</button></div>
+    </div>
+
+    <script>
+      var MATERIALS = [], BY_ROW = {}, dirty = {}, pending = {}, touchRecently = false;
+      var newRows = {};   // row -> true (รายการที่เพิ่มใหม่ในเซสชันนี้ — แก้ identity/ลบได้)
+      var lastShown = 0;  // จำนวนแถวที่กำลังแสดง (อัปเดตแบบ incremental ไม่ต้องสแกนใหม่)
+      var LOOKUPS = { depts: [], mainCats: [] };
+      var EDIT_FIELDS = ['mainDept','subDept','mainCat','name2','image','spec','brand','weight','width','length','height','unitStore','unitBuy','note'];
+      var CHOICE_SRC = { mainDept:'depts', subDept:'depts', mainCat:'mainCats' };
+      var CHOICE_MULTI = { mainDept:false, subDept:true, mainCat:false };
+
+      var SVGA = 'viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"';
+      var ICON = {
+        camera:'<svg class="ic" '+SVGA+'><path d="M3 8.5A1.5 1.5 0 0 1 4.5 7H7l1.3-1.7a1 1 0 0 1 .8-.4h5.8a1 1 0 0 1 .8.4L17 7h2.5A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z"/><circle cx="12" cy="13" r="3.3"/></svg>',
+        check:'<svg class="ic" '+SVGA+'><path d="M5 12.5l4.2 4.2L19 7"/></svg>',
+        edit:'<svg class="ic" '+SVGA+'><path d="M4 20h4L19 9a2 2 0 0 0-3-3L5 17v3z"/></svg>',
+        rows:'<svg class="ic" '+SVGA+'><rect x="3.5" y="5" width="17" height="14" rx="1.5"/><path d="M3.5 10h17M3.5 14.5h17"/></svg>',
+        columns:'<svg class="ic" '+SVGA+'><rect x="3.5" y="5" width="17" height="14" rx="1.5"/><path d="M9 5v14M15 5v14"/></svg>',
+        trash:'<svg class="ic" '+SVGA+'><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>',
+        plus:'<svg class="ic" '+SVGA+'><path d="M12 5v14M5 12h14"/></svg>'
+      };
+
+      var COL_COUNT = 19;
+      var COLW = {1:46,2:300,3:140,4:130,5:160,6:150,7:150,8:260,9:200,10:120,11:180,12:120,13:80,14:80,15:80,16:80,17:110,18:110,19:200};
+      var COL_NAMES = {}, spCol = null;
+
+      // ---------- โหลด ----------
+      window.addEventListener('load', function(){
+        google.script.run
+          .withSuccessHandler(function(lk){ LOOKUPS = lk || {depts:[],mainCats:[]}; loadMaterials(); })
+          .withFailureHandler(function(err){ document.getElementById('loading').textContent='❌ โหลดตัวเลือกไม่สำเร็จ: '+err.message; })
+          .getLookups();
+      });
+      function loadMaterials(){
+        google.script.run
+          .withSuccessHandler(render)
+          .withFailureHandler(function(err){ document.getElementById('loading').textContent='❌ โหลดข้อมูลไม่สำเร็จ: '+err.message; })
+          .getMaterials();
+      }
+
+      function render(data){
+        MATERIALS = data || [];
+        var rows = new Array(MATERIALS.length);
+        for (var i=0;i<MATERIALS.length;i++){ var m=MATERIALS[i]; BY_ROW[m.row]=m; rows[i]=rowHtml(m); }
+        document.getElementById('tbody').innerHTML = rows.join('');
+        document.getElementById('loading').classList.add('hide');
+        document.getElementById('grid').classList.remove('hide');
+
+        buildFilterOptions();
+        var s = document.getElementById('search');
+        s.disabled = false;
+        var ft=null;
+        s.addEventListener('input', function(){ clearTimeout(ft); ft=setTimeout(applyFilters,160); });
+        document.getElementById('searchClear').addEventListener('click', function(){ s.value=''; applyFilters(); s.focus(); });
+        var fd=document.getElementById('filterDept'); fd.disabled=false; fd.addEventListener('change', applyFilters);
+        var fc=document.getElementById('filterCat'); fc.disabled=false; fc.addEventListener('change', applyFilters);
+        var fsc=document.getElementById('filterSubCat'); fsc.disabled=false; fsc.addEventListener('change', applyFilters);
+
+        var addBtn=document.getElementById('addRowBtn');
+        addBtn.innerHTML=ICON.plus;
+        addBtn.addEventListener('click', addRowFlow);
+
+        var tbody = document.getElementById('tbody');
+        tbody.addEventListener('input', onEdit);
+        tbody.addEventListener('change', onChangeCommit);
+        tbody.addEventListener('click', onCellClick);
+        var lpTimer=null;
+        tbody.addEventListener('touchstart', function(e){ touchRecently=true; var c=e.target.closest('.name-cell'); if(!c)return; clearTimeout(lpTimer); lpTimer=setTimeout(function(){ showCellTip(c); },450); }, {passive:true});
+        tbody.addEventListener('touchmove', function(){ clearTimeout(lpTimer); });
+        function endTouch(){ clearTimeout(lpTimer); setTimeout(function(){ touchRecently=false; },600); }
+        tbody.addEventListener('touchend', endTouch); tbody.addEventListener('touchcancel', endTouch);
+
+        var cp=document.getElementById('choicePopup');
+        cp.addEventListener('click', onChoiceClick);
+        cp.addEventListener('change', onChoiceChange);
+        document.addEventListener('click', function(){ closeChoicePopup(); closeCellTip(); });
+        window.addEventListener('resize', function(){ closeChoicePopup(); closeCellTip(); });
+        document.querySelector('.table-wrap').addEventListener('scroll', function(){ closeChoicePopup(); closeCellTip(); });
+        window.addEventListener('beforeunload', function(e){ if(Object.keys(pending).length||Object.keys(dirty).length){ e.preventDefault(); e.returnValue=''; } });
+
+        document.getElementById('imgFile').addEventListener('change', onImgFile);
+
+        applyViewMode();
+        document.getElementById('viewToggle').addEventListener('click', function(){ document.getElementById('grid').classList.toggle('mode-collapsed'); applyViewMode(); });
+        document.getElementById('refreshBtn').addEventListener('click', refreshData);
+
+        setupResizers(); applyColStyle();
+        document.getElementById('resizeToggle').addEventListener('click', function(){ var on=document.getElementById('grid').classList.toggle('selecting'); this.classList.toggle('active',on); if(!on) closeSizePanel(); });
+        document.querySelector('#grid thead').addEventListener('click', function(e){ if(!document.getElementById('grid').classList.contains('selecting'))return; var th=e.target.closest('th'); if(!th)return; openSizePanel(th.cellIndex+1); });
+        document.getElementById('spRange').addEventListener('input', function(){ setColW(spCol, Number(this.value)); });
+        var pb=document.getElementById('sizePanel').querySelectorAll('.sp-presets button');
+        for(var p=0;p<pb.length;p++){ pb[p].addEventListener('click', function(){ var w=Number(this.getAttribute('data-w')); document.getElementById('spRange').value=w; setColW(spCol,w); }); }
+        document.getElementById('spClose').addEventListener('click', exitResizeMode);
+
+        updateStatus();
+        updateCount(MATERIALS.length, MATERIALS.length);
+      }
+
+      // ---------- render เซลล์ ----------
+      function rowHtml(m){
+        var isNew = !!m.manual;   // แถวที่เพิ่มเองผ่านเว็บ (จำถาวรด้วย marker) — แก้ identity/ลบได้
+        return '<tr data-row="'+m.row+'"'+(isNew?' class="new-row"':'')+'>'
+          + idxTd(m, isNew)
+          + comboTd(m)
+          + (isNew ? editTd(m.row,'code',m.code,'code-col col-cde') : roTd(m.code,'code-col col-cde'))
+          + choiceTd(m.row,'mainDept',m.mainDept)
+          + choiceTd(m.row,'subDept',m.subDept)
+          + choiceTd(m.row,'mainCat',m.mainCat)
+          + (isNew ? editTd(m.row,'subCat',m.subCat,'col-cde') : roTd(m.subCat,'col-cde'))
+          + (isNew ? editTd(m.row,'name1',m.name1,'col-cde') : roTd(m.name1,'name-cell col-cde'))
+          + editTd(m.row,'name2',m.name2,'wide')
+          + imageTd(m.row,m.image)
+          + editTd(m.row,'spec',m.spec,'wide')
+          + editTd(m.row,'brand',m.brand,'')
+          + editTd(m.row,'weight',m.weight,'narrow',true)
+          + editTd(m.row,'width',m.width,'narrow',true)
+          + editTd(m.row,'length',m.length,'narrow',true)
+          + editTd(m.row,'height',m.height,'narrow',true)
+          + editTd(m.row,'unitStore',m.unitStore,'')
+          + editTd(m.row,'unitBuy',m.unitBuy,'')
+          + editTd(m.row,'note',m.note,'wide')
+          + '</tr>';
+      }
+      function roTd(v,cls){ return '<td class="ro '+(cls||'')+'"><span class="cell" title="'+esc(v)+'">'+esc(v)+'</span></td>'; }
+      function idxTd(m, isNew){
+        if(isNew) return '<td class="idx idx-new" data-delrow="'+m.row+'" title="แตะเพื่อลบรายการนี้"><span class="idx-no">'+esc(m.no)+'</span><span class="idx-del">'+ICON.trash+'</span></td>';
+        return '<td class="idx">'+esc(m.no)+'</td>';
+      }
+      function editTd(row,field,v,cls,num){ return '<td class="edit '+(cls||'')+'"><input data-field="'+field+'" value="'+esc(v)+'"'+(num?' inputmode="decimal"':'')+'></td>'; }
+      function comboTd(m){
+        return '<td class="ro combo-col name-cell"><div class="combo">'
+          + '<div class="combo-code">'+esc(m.code)+'</div>'
+          + '<div class="combo-sub">'+esc(m.subCat)+'</div>'
+          + '<div class="combo-name" title="'+esc(m.name1)+'">'+esc(m.name1)+'</div>'
+          + '</div></td>';
+      }
+      // ช่อง choice (เลือกค่าเดียว/หลายค่า)
+      function choiceTd(row,field,v){ return '<td class="edit choice-cell" data-field="'+field+'" data-crow="'+row+'"><div class="choice-display">'+choiceChips(field,v)+'</div></td>'; }
+      function choiceChips(field,v){
+        var multi=CHOICE_MULTI[field];
+        var arr = multi ? splitMulti(v) : ((v!=null && String(v).trim()!=='') ? [String(v).trim()] : []);
+        if(!arr.length) return '<span class="ph">—</span>';
+        return arr.map(function(d){ return '<span class="chip">'+esc(d)+'</span>'; }).join('');
+      }
+      function splitMulti(v){ return String(v==null?'':v).split(',').map(function(s){return s.trim();}).filter(Boolean); }
+
+      function imageTd(row,v){ return '<td class="edit img-cell" data-imgrow="'+row+'"><div class="img-display">'+imgInner(v)+'</div></td>'; }
+      function imgInner(v){
+        var url=String(v==null?'':v).trim();
+        if(url) return '<img class="img-thumb" src="'+esc(thumbUrl(url))+'" alt="" loading="lazy"><span class="img-x" title="ลบรูป">×</span>';
+        return '<span class="img-add">'+ICON.camera+'เพิ่มรูป</span>';
+      }
+      function driveId(u){ var m=String(u).match(/[-\w]{25,}/); return m?m[0]:''; }
+      function thumbUrl(u){ var id=driveId(u); return id?('https://lh3.googleusercontent.com/d/'+id+'=w200'):u; }
+      function viewImageUrl(u){ var id=driveId(u); return id?('https://lh3.googleusercontent.com/d/'+id+'=w1600'):u; }
+
+      // ---------- แก้ไข / auto-save ----------
+      function onEdit(e){
+        var inp=e.target; if(!inp||inp.tagName!=='INPUT')return;
+        var tr=inp.closest('tr'); var row=Number(tr.getAttribute('data-row'));
+        BY_ROW[row][inp.getAttribute('data-field')] = inp.value;
+        markDirty(row);
+      }
+      function onChangeCommit(e){
+        var inp=e.target; if(!inp||inp.tagName!=='INPUT')return;
+        var tr=inp.closest('tr'); if(!tr)return;
+        var row=Number(tr.getAttribute('data-row'));
+        if(dirty[row]) saveRow(row);
+      }
+      function markDirty(row){
+        if(!dirty[row]){ dirty[row]=true; var tr=document.querySelector('tr[data-row="'+row+'"]'); if(tr){ tr.classList.add('dirty'); tr.classList.remove('saved'); } }
+        updateStatus();
+      }
+      function saveRow(row){
+        var m=BY_ROW[row], payload={row:row}, isNew=!!(m&&m.manual);
+        EDIT_FIELDS.forEach(function(f){ payload[f]=m[f]; });
+        if(isNew){ payload.code=m.code; payload.subCat=m.subCat; payload.name1=m.name1; }
+        var tr=document.querySelector('tr[data-row="'+row+'"]');
+        delete dirty[row]; pending[row]=true;
+        if(tr){ tr.classList.remove('dirty','saved'); tr.classList.add('saving'); }
+        updateStatus();
+        var run=google.script.run
+          .withSuccessHandler(function(){ delete pending[row]; if(tr){ tr.classList.remove('saving'); tr.classList.add('saved'); setTimeout(function(){ tr.classList.remove('saved'); },1600); } updateStatus(); })
+          .withFailureHandler(function(err){ delete pending[row]; dirty[row]=true; if(tr){ tr.classList.remove('saving'); tr.classList.add('dirty'); } updateStatus(); showMsg('err','❌ บันทึกแถว '+row+' ไม่สำเร็จ: '+(err&&err.message?err.message:err)); });
+        if(isNew) run.saveNewRow(payload); else run.saveMaterialRow(payload);
+      }
+      function updateStatus(){
+        var p=Object.keys(pending).length, d=Object.keys(dirty).length, el=document.getElementById('saveStatus');
+        if(p>0){ el.innerHTML='<span class="img-spin"></span>'; el.title='กำลังบันทึก…'; }
+        else if(d>0){ el.innerHTML=ICON.edit; el.title='ยังไม่บันทึก '+d+' แถว'; }
+        else { el.innerHTML=ICON.check; el.title='บันทึกอัตโนมัติแล้วทั้งหมด'; }
+      }
+
+      // ---------- คลิกในเซลล์ ----------
+      function onCellClick(e){
+        var del=e.target.closest('.idx-new');
+        if(del){ e.stopPropagation(); deleteRowFlow(Number(del.getAttribute('data-delrow'))); return; }
+        var nameCell=e.target.closest('.name-cell');
+        if(nameCell){ e.stopPropagation(); if(!touchRecently) showCellTip(nameCell); return; }
+        var imgx=e.target.closest('.img-x');
+        if(imgx){ e.stopPropagation(); var cx=imgx.closest('.img-cell'); removeImage(Number(cx.getAttribute('data-imgrow')),cx); return; }
+        var imgcell=e.target.closest('.img-cell');
+        if(imgcell){ e.stopPropagation(); pickImage(Number(imgcell.getAttribute('data-imgrow'))); return; }
+        var chipx=e.target.closest('.chip-x');
+        if(chipx){ e.stopPropagation(); var cc=chipx.closest('.choice-cell'); removeChoice(cc, chipx.getAttribute('data-val')); return; }
+        var choice=e.target.closest('.choice-cell');
+        if(choice){ e.stopPropagation(); openChoicePopup(choice); return; }
+      }
+
+      // ---------- choice popup ----------
+      function openChoicePopup(cell){
+        var field=cell.getAttribute('data-field'), row=Number(cell.getAttribute('data-crow')), multi=CHOICE_MULTI[field];
+        var opts=LOOKUPS[CHOICE_SRC[field]]||[];
+        var cur = multi ? splitMulti(BY_ROW[row][field]) : [ (BY_ROW[row][field]!=null?String(BY_ROW[row][field]).trim():'') ];
+        var html='';
+        if(multi){
+          for(var i=0;i<opts.length;i++){ var d=opts[i]; html+='<label><input type="checkbox" value="'+esc(d)+'"'+(cur.indexOf(d)!==-1?' checked':'')+'>'+esc(d)+'</label>'; }
+        } else {
+          html+='<div class="opt'+(cur[0]===''?' sel':'')+'" data-v="">— (ว่าง) —</div>';
+          for(var j=0;j<opts.length;j++){ var o=opts[j]; html+='<div class="opt'+(cur[0]===o?' sel':'')+'" data-v="'+esc(o)+'">'+esc(o)+'</div>'; }
+        }
+        var pop=document.getElementById('choicePopup');
+        pop.className='choice-popup '+(multi?'multi':'single');
+        pop.innerHTML=html; pop._cell=cell; pop._field=field; pop._row=row; pop._multi=multi;
+        pop.classList.remove('hide');
+        var r=cell.getBoundingClientRect(), pw=Math.max(r.width,210);
+        pop.style.minWidth=pw+'px';
+        pop.style.left=Math.max(8, Math.min(r.left, window.innerWidth-pw-8))+'px';
+        if(r.bottom+260>window.innerHeight){ pop.style.top=''; pop.style.bottom=(window.innerHeight-r.top)+'px'; }
+        else { pop.style.bottom=''; pop.style.top=r.bottom+'px'; }
+      }
+      function onChoiceClick(e){
+        e.stopPropagation();
+        var pop=document.getElementById('choicePopup');
+        if(pop._multi) return;
+        var opt=e.target.closest('.opt'); if(!opt) return;
+        var row=pop._row, field=pop._field, val=opt.getAttribute('data-v');
+        BY_ROW[row][field]=val;
+        pop._cell.querySelector('.choice-display').innerHTML=choiceChips(field,val);
+        markDirty(row); closeChoicePopup(); saveRow(row);
+      }
+      var _choiceSaveTimer=null;
+      function onChoiceChange(){
+        var pop=document.getElementById('choicePopup');
+        if(!pop._multi) return;
+        var row=pop._row, field=pop._field;
+        var sel=[], boxes=pop.querySelectorAll('input[type=checkbox]');
+        for(var i=0;i<boxes.length;i++){ if(boxes[i].checked) sel.push(boxes[i].value); }
+        BY_ROW[row][field]=sel.join(', ');
+        pop._cell.querySelector('.choice-display').innerHTML=choiceChips(field,BY_ROW[row][field]);
+        markDirty(row);
+        // บันทึกอัตโนมัติหลังหยุดติ๊ก (ไม่ต้องรอปิด popup)
+        clearTimeout(_choiceSaveTimer);
+        _choiceSaveTimer=setTimeout(function(){ if(dirty[row]) saveRow(row); }, 500);
+      }
+      function closeChoicePopup(){
+        var pop=document.getElementById('choicePopup');
+        if(pop.classList.contains('hide')) return;
+        var row=pop._row;
+        pop.classList.add('hide');
+        if(pop._multi && row && dirty[row]) saveRow(row);
+      }
+      function removeChoice(cell, val){
+        var field=cell.getAttribute('data-field'), row=Number(cell.getAttribute('data-crow'));
+        BY_ROW[row][field]=splitMulti(BY_ROW[row][field]).filter(function(d){return d!==val;}).join(', ');
+        cell.querySelector('.choice-display').innerHTML=choiceChips(field,BY_ROW[row][field]);
+        markDirty(row); saveRow(row);
+      }
+
+      // ---------- รูปภาพ ----------
+      var pendingRow=null;
+      function pickImage(row){ pendingRow=row; var inp=document.getElementById('imgFile'); inp.value=''; inp.click(); }
+      function onImgFile(){
+        var f=this.files&&this.files[0]; this.value='';
+        if(!f||pendingRow==null){ pendingRow=null; return; }
+        var row=pendingRow; pendingRow=null;
+        var td=document.querySelector('td.img-cell[data-imgrow="'+row+'"]'), disp=td?td.querySelector('.img-display'):null;
+        if(disp) disp.innerHTML='<span class="img-spin"></span><span class="img-uptxt">อัปโหลด…</span>';
+        function restore(msg){ if(disp) disp.innerHTML=imgInner(BY_ROW[row].image); if(msg) showMsg('err',msg); }
+        var reader=new FileReader();
+        reader.onload=function(){
+          try{
+            var base64=String(reader.result).split(',')[1];
+            if(!base64){ restore('❌ อ่านไฟล์ไม่สำเร็จ'); return; }
+            var mime=f.type||'image/jpeg';
+            google.script.run
+              .withSuccessHandler(function(res){ BY_ROW[row].image=res.url; var t2=document.querySelector('td.img-cell[data-imgrow="'+row+'"]'); if(t2) t2.querySelector('.img-display').innerHTML=imgInner(res.url); showMsg('ok','✅ อัปโหลดรูปแล้ว (แถว '+res.row+')'); })
+              .withFailureHandler(function(err){ restore('❌ อัปโหลดไม่สำเร็จ: '+(err&&err.message?err.message:err)); })
+              .uploadImage({ row:row, base64:base64, mimeType:mime, filename:'material_row'+row+'_'+(BY_ROW[row].code||'')+extFromMime_(mime) });
+          }catch(e){ restore('❌ '+e.message); }
+        };
+        reader.onerror=function(){ restore('❌ อ่านไฟล์ไม่สำเร็จ'); };
+        reader.readAsDataURL(f);
+      }
+      function extFromMime_(m){ if(m==='image/png')return '.png'; if(m==='image/heic'||m==='image/heif')return '.heic'; if(m==='image/webp')return '.webp'; return '.jpg'; }
+      function removeImage(row,td){
+        if(!confirm('ลบรูปของแถวนี้?\n(ลิงก์รูปจะถูกลบออกจากเซลล์ — ไฟล์ใน Drive ยังอยู่)')) return;
+        BY_ROW[row].image=''; if(!td) td=document.querySelector('td.img-cell[data-imgrow="'+row+'"]');
+        if(td) td.querySelector('.img-display').innerHTML=imgInner('');
+        markDirty(row); saveRow(row);
+      }
+
+      // ---------- tooltip ชื่อเต็ม ----------
+      function showCellTip(td){
+        var span=td.querySelector('.combo-name')||td.querySelector('.cell');
+        var full=span?(span.getAttribute('title')||span.textContent):td.textContent;
+        if(!full||!full.trim()){ closeCellTip(); return; }
+        var tip=document.getElementById('cellTip'); tip.textContent=full; tip.classList.add('show');
+        var r=td.getBoundingClientRect();
+        tip.style.left=Math.max(8, Math.min(r.left, window.innerWidth-tip.offsetWidth-10))+'px';
+        if(r.bottom+6+tip.offsetHeight>window.innerHeight){ tip.style.top=''; tip.style.bottom=(window.innerHeight-r.top+6)+'px'; }
+        else { tip.style.bottom=''; tip.style.top=(r.bottom+6)+'px'; }
+      }
+      function closeCellTip(){ document.getElementById('cellTip').classList.remove('show'); }
+
+      // ---------- กรอง ----------
+      function buildFilterOptions(){
+        var fd=document.getElementById('filterDept'), h1='<option value="">แผนก: ทั้งหมด</option>';
+        for(var i=0;i<LOOKUPS.depts.length;i++) h1+='<option value="'+esc(LOOKUPS.depts[i])+'">แผนก: '+esc(LOOKUPS.depts[i])+'</option>';
+        fd.innerHTML=h1;
+        var fc=document.getElementById('filterCat'), h2='<option value="">หมวด: ทั้งหมด</option>';
+        for(var j=0;j<LOOKUPS.mainCats.length;j++) h2+='<option value="'+esc(LOOKUPS.mainCats[j])+'">หมวด: '+esc(LOOKUPS.mainCats[j])+'</option>';
+        fc.innerHTML=h2;
+        // SubCat: รายการไม่ซ้ำจากข้อมูลจริง
+        var set={}, list=[];
+        for(var k=0;k<MATERIALS.length;k++){ var s=String(MATERIALS[k].subCat||'').trim(); if(s && !set[s]){ set[s]=1; list.push(s); } }
+        list.sort(function(a,b){ return a.localeCompare(b,'th'); });
+        var fs=document.getElementById('filterSubCat'), h3='<option value="">SubCat: ทั้งหมด</option>';
+        for(var n=0;n<list.length;n++) h3+='<option value="'+esc(list[n])+'">SubCat: '+esc(list[n])+'</option>';
+        fs.innerHTML=h3;
+      }
+      function applyFilters(){
+        var q=(document.getElementById('search').value||'').trim().toLowerCase();
+        var dp=document.getElementById('filterDept').value, mc=document.getElementById('filterCat').value, sc=document.getElementById('filterSubCat').value;
+        document.getElementById('searchClear').classList.toggle('show', q.length>0);
+        var trs=document.getElementById('tbody').children, shown=0;
+        for(var i=0;i<trs.length;i++){
+          var rn=Number(trs[i].getAttribute('data-row')), m=BY_ROW[rn];
+          var ok;
+          if(newRows[rn]){ ok=true; }   // รายการที่เพิ่งเพิ่ม แสดงเสมอ
+          else {
+            var hay=((m.code||'')+' '+(m.name1||'')+' '+(m.name2||'')+' '+(m.subCat||'')+' '+(m.mainCat||'')+' '+(m.mainDept||'')+' '+(m.subDept||'')).toLowerCase();
+            var okDept = dp==='' || String(m.mainDept||'')===dp || splitMulti(m.subDept).indexOf(dp)!==-1;
+            ok = (q===''||hay.indexOf(q)!==-1) && okDept && (mc===''||String(m.mainCat||'')===mc) && (sc===''||String(m.subCat||'')===sc);
+          }
+          trs[i].classList.toggle('hide', !ok); if(ok) shown++;
+        }
+        updateCount(shown, MATERIALS.length);
+      }
+      function updateCount(shown,total){ lastShown=shown; document.getElementById('count').textContent = (shown===total)?(total.toLocaleString()+' รายการ'):(shown.toLocaleString()+' / '+total.toLocaleString()+' รายการ'); }
+
+      // ---------- มุมมอง ยุบ/กลาง ----------
+      function applyViewMode(){
+        var collapsed=document.getElementById('grid').classList.contains('mode-collapsed');
+        var btn=document.getElementById('viewToggle');
+        btn.innerHTML = collapsed?ICON.rows:ICON.columns;
+        btn.title = collapsed?'มุมมอง: ยุบ — กดเพื่อแสดงแยกคอลัมน์':'มุมมอง: กลาง — กดเพื่อยุบรวม';
+      }
+
+      // ---------- refresh ----------
+      function reloadGrid(okMsg, btn){
+        if(btn) btn.classList.add('spinning');
+        var fd=document.getElementById('filterDept').value, fc=document.getElementById('filterCat').value,
+            fs=document.getElementById('filterSubCat').value, sv=document.getElementById('search').value;
+        google.script.run
+          .withSuccessHandler(function(data){
+            MATERIALS=data||[]; BY_ROW={}; dirty={}; pending={}; newRows={};
+            var rows=new Array(MATERIALS.length);
+            for(var i=0;i<MATERIALS.length;i++){ var m=MATERIALS[i]; BY_ROW[m.row]=m; rows[i]=rowHtml(m); }
+            document.getElementById('tbody').innerHTML=rows.join('');
+            buildFilterOptions();
+            document.getElementById('filterDept').value=fd; document.getElementById('filterCat').value=fc;
+            document.getElementById('filterSubCat').value=fs; document.getElementById('search').value=sv;
+            applyFilters(); updateStatus();
+            if(btn) btn.classList.remove('spinning');
+            if(okMsg) showMsg('ok', okMsg);
+          })
+          .withFailureHandler(function(err){ if(btn) btn.classList.remove('spinning'); showMsg('err','โหลดไม่สำเร็จ: '+(err&&err.message?err.message:err)); })
+          .getMaterials();
+      }
+      function refreshData(){ reloadGrid('รีเฟรชข้อมูลแล้ว', document.getElementById('refreshBtn')); }
+
+      // ---------- เพิ่ม/ลบ แถว ----------
+      function addRowFlow(){
+        var btn=document.getElementById('addRowBtn'); btn.disabled=true;
+        google.script.run
+          .withSuccessHandler(function(m){
+            newRows[m.row]=true; MATERIALS.push(m); BY_ROW[m.row]=m;
+            var tbody=document.getElementById('tbody');
+            tbody.insertAdjacentHTML('beforeend', rowHtml(m));   // เพิ่มแค่แถวเดียว ไม่ re-render ทั้งตาราง
+            btn.disabled=false;
+            updateCount(lastShown+1, MATERIALS.length);          // นับ +1 (ไม่สแกน 1,470 แถว)
+            requestAnimationFrame(function(){ if(tbody.lastElementChild) tbody.lastElementChild.scrollIntoView({block:'center'}); });
+            showMsg('ok','เพิ่มรายการใหม่แล้ว — กรอกข้อมูล แล้วระบบบันทึกอัตโนมัติ');
+          })
+          .withFailureHandler(function(err){ btn.disabled=false; showMsg('err','เพิ่มรายการไม่สำเร็จ: '+(err&&err.message?err.message:err)); })
+          .addRow();
+      }
+      function deleteRowFlow(row){
+        if(!confirm('ลบรายการนี้ออกจาก database?')) return;
+        google.script.run
+          .withSuccessHandler(function(){ reloadGrid('ลบรายการแล้ว'); })
+          .withFailureHandler(function(err){ showMsg('err','ลบไม่สำเร็จ: '+(err&&err.message?err.message:err)); })
+          .deleteRow(row);
+      }
+
+      // ---------- ปรับความกว้างคอลัมน์ ----------
+      function applyColStyle(){
+        var css='';
+        for(var c=1;c<=COL_COUNT;c++){ var w=COLW[c]; if(!w)continue; css+='#grid tr>th:nth-child('+c+'),#grid tr>td:nth-child('+c+'){width:'+w+'px;min-width:'+w+'px;max-width:'+w+'px}'; }
+        document.getElementById('colStyle').textContent=css;
+      }
+      var _colPending=false;
+      function applyColStyleThrottled(){ if(_colPending)return; _colPending=true; requestAnimationFrame(function(){ _colPending=false; applyColStyle(); }); }
+      function setupResizers(){
+        var ths=document.querySelectorAll('#grid thead th');
+        for(var i=0;i<ths.length;i++){ COL_NAMES[i+1]=((ths[i].childNodes[0]&&ths[i].childNodes[0].nodeValue)||ths[i].textContent||'').trim(); var rz=document.createElement('span'); rz.className='col-resizer'; rz.setAttribute('data-col',i+1); ths[i].appendChild(rz); }
+        var col=null, sx=0, sw=0;
+        document.querySelector('#grid thead').addEventListener('pointerdown', function(e){ var rz=e.target.closest('.col-resizer'); if(!rz)return; e.preventDefault(); col=Number(rz.getAttribute('data-col')); sx=e.clientX; sw=COLW[col]||rz.parentNode.offsetWidth; document.body.classList.add('col-resizing-active'); });
+        document.addEventListener('pointermove', function(e){ if(col==null)return; COLW[col]=Math.max(40,Math.round(sw+(e.clientX-sx))); applyColStyleThrottled(); });
+        function end(){ if(col!=null){ col=null; document.body.classList.remove('col-resizing-active'); } }
+        document.addEventListener('pointerup', end); document.addEventListener('pointercancel', end);
+      }
+      function openSizePanel(c){
+        spCol=c; var ths=document.querySelectorAll('#grid thead th');
+        for(var i=0;i<ths.length;i++) ths[i].classList.toggle('col-selected',(i+1)===c);
+        document.getElementById('spName').textContent=COL_NAMES[c]||('คอลัมน์ '+c);
+        var w=COLW[c]||100; document.getElementById('spRange').value=w; document.getElementById('spVal').textContent=w+' px';
+        document.getElementById('sizePanel').classList.remove('hide');
+      }
+      function setColW(c,w){ if(c==null)return; w=Math.max(40,Math.min(600,w)); COLW[c]=w; applyColStyleThrottled(); document.getElementById('spVal').textContent=w+' px'; }
+      function closeSizePanel(){ document.getElementById('sizePanel').classList.add('hide'); var s=document.querySelectorAll('#grid thead th.col-selected'); for(var i=0;i<s.length;i++) s[i].classList.remove('col-selected'); spCol=null; }
+      function exitResizeMode(){ document.getElementById('grid').classList.remove('selecting'); document.getElementById('resizeToggle').classList.remove('active'); closeSizePanel(); }
+
+      // ---------- utils ----------
+      function showMsg(type,text){ var m=document.getElementById('msg'); m.className='msg show '+type; m.textContent=text; if(type==='ok') setTimeout(function(){ m.className='msg'; },5000); }
+      function esc(s){ return String(s===null||s===undefined?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    </script>
+  </body>
+</html>
