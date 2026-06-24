@@ -19,19 +19,40 @@
  *   O(15) สูง (mm)      [แก้ได้ • ตัวเลข]
  *   P(16) หน่วยเก็บ (IC) [แก้ได้]
  *   Q(17) หน่วยซื้อ (PO) [แก้ได้]
+ *   R(18) จำนวน          [แก้ได้ • ตัวเลข]   (เพิ่ม 2026-06-23)
+ *   S(19) Note           [แก้ได้]            (เพิ่ม 2026-06-23)
+ *   T(20) _web marker    [ภายใน • ค่า "WEB"] (ย้ายจาก R เดิม)
  */
 
 var SPREADSHEET_ID = '1FtoQo1BptJ3QnJxULZ-VZ130n0IKqNaV2XznCeo4kJE';
 var SHEET_NAME = 'RawData1';
 var DEPT_SHEET = 'Dept';
 var MAINCAT_SHEET = 'MainCat';
+var UNITS_SHEET = 'Units';        // หน่วย (คอลัมน์ B = unit_name)
 var IMAGE_FOLDER_ID = '1CVDBgTgMbs9cHcC4yrJf2DKmrXD0bx4W';
 var LOG_SHEET_NAME = '_EditLog';
 var FIRST_DATA_ROW = 2;
-var TOTAL_COLUMNS = 17;     // A..Q
+var TOTAL_COLUMNS = 19;     // A..S (คอลัมน์ข้อมูลที่กรอก)
 var IMAGE_COL = 9;          // I
-var NOTE_COL = 18;          // R — Note (กรอกได้)
-var MARKER_COL = 19;        // S — marker "_web" (ทำเครื่องหมายแถวที่เพิ่มเองผ่านเว็บ เพื่อให้ลบได้เสมอ)
+var QTY_COL = 18;           // R — จำนวน (แก้ได้ • ตัวเลข)
+var NOTE_COL = 19;          // S — Note (แก้ได้ • ข้อความ)
+var MARKER_COL = 20;        // T — ทำเครื่องหมายแถวที่เพิ่มเองผ่านเว็บ (ค่า "WEB") • ย้ายจาก R เดิม
+
+// ----- เมนู "เพิ่มจาก ERP" -----
+var STAGING_SHEET = 'DT1.1.1_Staging';  // ชีตพักรายการที่เพิ่มจาก ERP (โครงสร้าง A..R เหมือน DT1.1.1)
+var ALLMAT_SHEET  = 'All_Mat';          // ข้อมูลวัสดุทั้งหมดจาก ERP
+var ERP_NOTES_SHEET = 'ERP_Notes';      // ชีตจดรายการที่ "ยังไม่มีใน ERP/All_Mat" (รอเพิ่มเข้า ERP)
+var ALLMAT_CACHE_KEY = 'allmat_v1';     // cache รายการ All_Mat (แบบย่อ) เพื่อค้นหาเร็ว
+var ALLMAT_CACHE_TTL = 21600;           // 6 ชม.
+var WAREHOUSE_NAME = 'BPI';             // ชื่อคลัง (ใช้แสดงป้าย "อยู่ใน BPI แล้ว")
+// หัวคอลัมน์ใน All_Mat ที่ใช้เติมให้อัตโนมัติ (จับคู่ด้วย "ชื่อหัว" ไม่ผูกเลขคอลัมน์)
+var ALLMAT_COLS = {
+  code:      'Product Code',   // → B Material Code (รหัสเต็ม PBPI… ไม่ใช่ 'PRODUCT CODE')
+  subCat:    'SUB GROUP NAME', // → F SubCat
+  name1:     'ชื่อในPO',       // → G Material Name (1)
+  unitStore: 'Unit Name (IC)', // → P หน่วยเก็บ
+  unitBuy:   'Unit Name (PO)'  // → Q หน่วยซื้อ
+};
 
 // ช่องที่แก้ไขได้ (key ฝั่งเว็บ → คอลัมน์ในชีต + ป้ายใน log + ชนิด)
 var EDITABLE = [
@@ -48,13 +69,15 @@ var EDITABLE = [
   { key: 'height',    col: 15, label: 'สูง (O)',                type: 'num'  },
   { key: 'unitStore', col: 16, label: 'หน่วยเก็บ (P)',          type: 'text' },
   { key: 'unitBuy',   col: 17, label: 'หน่วยซื้อ (Q)',          type: 'text' },
-  { key: 'note',      col: 18, label: 'Note (R)',               type: 'text' }
+  { key: 'qty',       col: 18, label: 'จำนวน (R)',              type: 'num'  },
+  { key: 'note',      col: 19, label: 'Note (S)',               type: 'text' }
 ];
 
 /** ---------------- Web App ---------------- */
 function doGet() {
   try { getLogSheet_(); } catch (e) {}
-  try { var sh0 = getSheet_(); ensureMarkerCol_(sh0); migrateMarkerToS_(sh0); } catch (e) {}
+  try { ensureMarkerCol_(getSheet_()); } catch (e) {}
+  try { maybeMigrateRST_(); } catch (e) {}   // ย้ายโครงสร้าง R→T อัตโนมัติครั้งเดียว
   return HtmlService.createTemplateFromFile('Index')
     .evaluate()
     .setTitle('BPI Product Data')
@@ -72,31 +95,95 @@ function getSheet_() {
   return sh;
 }
 
-/** ให้แน่ใจว่ามีคอลัมน์ Note (R) + marker (S) พร้อมหัวตาราง */
-function ensureMarkerCol_(sh) {
-  if (sh.getMaxColumns() < MARKER_COL) sh.insertColumnsAfter(sh.getMaxColumns(), MARKER_COL - sh.getMaxColumns());
-  var r1 = String(sh.getRange(1, NOTE_COL).getValue()).trim();
-  if (r1 === '' || r1 === '_web') sh.getRange(1, NOTE_COL).setValue('Note');   // เดิม R เคยเป็น _web → เปลี่ยนเป็น Note
-  if (!sh.getRange(1, MARKER_COL).getValue()) sh.getRange(1, MARKER_COL).setValue('_web');
+/** เลือกชีตปลายทางตาม key ('staging' = ชีตพัก, อื่น ๆ = DT1.1.1) */
+function sheetFor_(sheetKey) {
+  return (sheetKey === 'staging') ? getStagingSheet_() : getSheet_();
 }
 
-/** ย้ายค่า marker เดิมจาก R(18) ไป S(19) ครั้งเดียว (ตอน R ยังเป็น marker) */
-function migrateMarkerToS_(sh) {
-  var lastRow = sh.getLastRow();
-  if (lastRow < FIRST_DATA_ROW) return;
-  var rng = sh.getRange(FIRST_DATA_ROW, NOTE_COL, lastRow - FIRST_DATA_ROW + 1, 2); // R:S
-  var vals = rng.getValues(), changed = false;
-  for (var i = 0; i < vals.length; i++) {
-    if (String(vals[i][0]).trim() === 'WEB' && String(vals[i][1]).trim() === '') {
-      vals[i][1] = 'WEB'; vals[i][0] = ''; changed = true;   // S = marker, R = เคลียร์ (ไว้ใส่ Note)
-    }
+/** ชีตพัก (staging) — สร้างอัตโนมัติถ้ายังไม่มี โดยก็อปหัวตาราง A..R จาก DT1.1.1 */
+function getStagingSheet_() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sh = ss.getSheetByName(STAGING_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(STAGING_SHEET);
+    var src = getSheet_();
+    var width = Math.max(MARKER_COL, src.getLastColumn());
+    sh.getRange(1, 1, 1, width).setValues(src.getRange(1, 1, 1, width).getValues());
+    sh.setFrozenRows(1);
+    sh.getRange(1, 1, 1, width).setFontWeight('bold');
   }
-  if (changed) rng.setValues(vals);
+  ensureMarkerCol_(sh);
+  return sh;
+}
+
+/** ให้แน่ใจว่ามีคอลัมน์ R(จำนวน) S(Note) T(_web marker) ครบ + หัวตาราง */
+function ensureMarkerCol_(sh) {
+  if (sh.getMaxColumns() < MARKER_COL) sh.insertColumnsAfter(sh.getMaxColumns(), MARKER_COL - sh.getMaxColumns());
+  ensureHeader_(sh, QTY_COL, 'จำนวน');
+  ensureHeader_(sh, NOTE_COL, 'Note');
+  ensureHeader_(sh, MARKER_COL, '_web');
+}
+/** ตั้งหัวคอลัมน์เฉพาะเมื่อยังว่าง (ไม่ทับของเดิม) */
+function ensureHeader_(sh, col, label) {
+  if (!String(sh.getRange(1, col).getValue()).trim()) sh.getRange(1, col).setValue(label);
+}
+
+/** ---------------- ย้ายโครงสร้าง: marker _web จาก R(18) → T(20) + เพิ่ม R(จำนวน) S(Note) ----------------
+ *  ย้ายเฉพาะเซลล์คอลัมน์ R ที่มีค่า "WEB" (marker เดิม) ไป T แล้วล้าง R — ปลอดภัยกับข้อมูลจำนวน (ตัวเลข)
+ *  รันซ้ำได้ (idempotent): รอบถัดไปจะไม่เจอ "WEB" ใน R อีก จึงไม่ย้ายซ้ำ
+ *  เรียกเองได้ใน editor ตอน setup หรือปล่อยให้ doGet เรียกอัตโนมัติครั้งแรก */
+function migrateColumnsRST() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID), out = [];
+  [SHEET_NAME, STAGING_SHEET].forEach(function(name) {
+    var sh = ss.getSheetByName(name);
+    if (!sh) { out.push(name + ': ไม่พบชีต (ข้าม)'); return; }
+    if (sh.getMaxColumns() < MARKER_COL) sh.insertColumnsAfter(sh.getMaxColumns(), MARKER_COL - sh.getMaxColumns());
+    var last = sh.getLastRow(), moved = 0;
+    if (last >= FIRST_DATA_ROW) {
+      var n = last - FIRST_DATA_ROW + 1;
+      var rCol = sh.getRange(FIRST_DATA_ROW, QTY_COL, n, 1).getValues();    // R เดิม (อาจมี marker)
+      var tCol = sh.getRange(FIRST_DATA_ROW, MARKER_COL, n, 1).getValues(); // T ปลายทาง
+      var chR = false, chT = false;
+      for (var i = 0; i < n; i++) {
+        if (String(rCol[i][0]).trim().toUpperCase() === 'WEB') {           // ย้ายเฉพาะค่า marker
+          if (!String(tCol[i][0]).trim()) { tCol[i][0] = 'WEB'; chT = true; }
+          rCol[i][0] = ''; chR = true; moved++;
+        }
+      }
+      if (chT) sh.getRange(FIRST_DATA_ROW, MARKER_COL, n, 1).setValues(tCol);
+      if (chR) sh.getRange(FIRST_DATA_ROW, QTY_COL, n, 1).setValues(rCol);
+    }
+    sh.getRange(1, QTY_COL).setValue('จำนวน');    // ตั้งหัวให้ตรงโครงสร้างใหม่
+    sh.getRange(1, NOTE_COL).setValue('Note');
+    sh.getRange(1, MARKER_COL).setValue('_web');
+    out.push(name + ': ย้าย marker ' + moved + ' แถว → T, ตั้งหัว R/S/T เรียบร้อย');
+  });
+  SpreadsheetApp.flush();
+  var msg = out.join('\n');
+  Logger.log(msg);
+  return msg;
+}
+
+/** เรียกจาก doGet — ย้ายโครงสร้างอัตโนมัติ "ครั้งเดียว" (กันด้วย Script Property + lock) */
+function maybeMigrateRST_() {
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty('migratedRST') === '1') return;
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) return;        // ได้ล็อกไม่ทัน — รอบหน้าค่อยทำ
+  try {
+    if (props.getProperty('migratedRST') === '1') return;
+    migrateColumnsRST();
+    props.setProperty('migratedRST', '1');
+  } catch (e) {
+    // ปล่อยให้รอบถัดไปลองใหม่
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /** ---------------- อ่านข้อมูลวัสดุทั้งหมด ---------------- */
-function getMaterials() {
-  var sh = getSheet_();
+function getMaterials(sheetKey) {
+  var sh = sheetFor_(sheetKey);
   var lastRow = sh.getLastRow();
   if (lastRow < FIRST_DATA_ROW) return [];
 
@@ -126,7 +213,8 @@ function getMaterials() {
       height: r[14],     // O
       unitStore: r[15],  // P
       unitBuy: r[16],    // Q
-      note: r[17]        // R
+      qty: r[17],        // R จำนวน
+      note: r[18]        // S Note
     });
   }
   return out;
@@ -135,9 +223,23 @@ function getMaterials() {
 /** ---------------- รายการตัวเลือก (dropdown) ---------------- */
 function getLookups() {
   return {
-    depts: readLookupColumn_(DEPT_SHEET, 2),     // Dept!B (แผนก)
-    mainCats: readLookupColumn_(MAINCAT_SHEET, 2) // MainCat!B (หมวดหลัก)
+    depts: readLookupColumn_(DEPT_SHEET, 2),       // Dept!B (แผนก)
+    mainCats: readLookupColumn_(MAINCAT_SHEET, 2), // MainCat!B (หมวดหลัก)
+    units: readLookupColumn_(UNITS_SHEET, 2),      // Units!B (หน่วย)
+    deptColors: getDeptColors()                    // สีแผนกที่ผู้ใช้ตั้งไว้ (override)
   };
+}
+
+/** ---------------- สีแผนก (เก็บใน Script Properties — แชร์ทุกผู้ใช้) ---------------- */
+function getDeptColors() {
+  var raw = PropertiesService.getScriptProperties().getProperty('deptColors');
+  if (!raw) return {};
+  try { return JSON.parse(raw); } catch (e) { return {}; }
+}
+function setDeptColors(json) {
+  var obj = (typeof json === 'string') ? JSON.parse(json) : (json || {});
+  PropertiesService.getScriptProperties().setProperty('deptColors', JSON.stringify(obj));
+  return { ok: true };
 }
 
 function readLookupColumn_(sheetName, col) {
@@ -154,6 +256,205 @@ function readLookupColumn_(sheetName, col) {
   return out;
 }
 
+/** ---------------- All_Mat (ERP) → staging ---------------- */
+/** map ชื่อหัวคอลัมน์ (แถว 1) → เลขคอลัมน์ (1-based) */
+function headerIndex_(sh) {
+  var hdr = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+  var idx = {};
+  for (var i = 0; i < hdr.length; i++) {
+    var k = String(hdr[i]).trim();
+    if (k && !(k in idx)) idx[k] = i + 1;
+  }
+  return idx;
+}
+
+/** เซ็ตของ Material Code ในชีตหนึ่ง (อ่านคอลัมน์ B) */
+function codeSet_(sh) {
+  var set = {}, last = sh.getLastRow();
+  if (last < FIRST_DATA_ROW) return set;
+  var col = sh.getRange(FIRST_DATA_ROW, 2, last - FIRST_DATA_ROW + 1, 1).getValues();
+  for (var i = 0; i < col.length; i++) { var c = String(col[i][0]).trim(); if (c) set[c] = true; }
+  return set;
+}
+
+/** ---------------- cache รายการ All_Mat (แบบย่อ) ---------------- */
+/** อ่าน All_Mat เฉพาะคอลัมน์ที่ใช้ → array ย่อ [{code,subCat,name1,unitStore,unitBuy}] */
+function readAllMatList_() {
+  var am = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(ALLMAT_SHEET);
+  if (!am) throw new Error('ไม่พบชีต: ' + ALLMAT_SHEET);
+  var idx = headerIndex_(am);
+  var cCode = idx[ALLMAT_COLS.code];
+  if (!cCode) throw new Error('ไม่พบคอลัมน์ "' + ALLMAT_COLS.code + '" ใน ' + ALLMAT_SHEET);
+  var lastRow = am.getLastRow();
+  if (lastRow < 2) return [];
+  var vals = am.getRange(2, 1, lastRow - 1, am.getLastColumn()).getValues();
+  function pick(r, name) { var c = idx[name]; return c ? String(r[c - 1]).trim() : ''; }
+  var out = [];
+  for (var i = 0; i < vals.length; i++) {
+    var r = vals[i], code = String(r[cCode - 1]).trim();
+    if (!code) continue;
+    out.push({ code: code, subCat: pick(r, ALLMAT_COLS.subCat), name1: pick(r, ALLMAT_COLS.name1),
+               unitStore: pick(r, ALLMAT_COLS.unitStore), unitBuy: pick(r, ALLMAT_COLS.unitBuy) });
+  }
+  return out;
+}
+
+/** เก็บ list ลง CacheService (แบ่ง chunk กันเกิน 100KB/คีย์) */
+function putAllMatCache_(cache, list) {
+  var s = JSON.stringify(list), CH = 25000, n = Math.ceil(s.length / CH) || 1, obj = {};
+  for (var i = 0; i < n; i++) obj[ALLMAT_CACHE_KEY + '_' + i] = s.substring(i * CH, (i + 1) * CH);
+  cache.putAll(obj, ALLMAT_CACHE_TTL);
+  cache.put(ALLMAT_CACHE_KEY, String(n), ALLMAT_CACHE_TTL);
+}
+
+/** ดึง list จาก cache (ถ้าหมดอายุ/ไม่มี → อ่านชีตแล้ว cache ใหม่) */
+function getAllMatList_() {
+  var cache = CacheService.getScriptCache();
+  var meta = cache.get(ALLMAT_CACHE_KEY);
+  if (meta) {
+    var n = Number(meta), keys = [];
+    for (var i = 0; i < n; i++) keys.push(ALLMAT_CACHE_KEY + '_' + i);
+    var parts = cache.getAll(keys), joined = '', ok = true;
+    for (var j = 0; j < n; j++) { var p = parts[ALLMAT_CACHE_KEY + '_' + j]; if (p == null) { ok = false; break; } joined += p; }
+    if (ok) { try { return JSON.parse(joined); } catch (e) {} }
+  }
+  var list = readAllMatList_();
+  putAllMatCache_(cache, list);
+  return list;
+}
+
+/** รีเฟรช cache All_Mat ด้วยตนเอง (รันใน editor หรือเรียกจากปุ่มก็ได้) */
+function refreshAllMatCache() {
+  var list = readAllMatList_();
+  putAllMatCache_(CacheService.getScriptCache(), list);
+  return list.length;
+}
+
+/** ---------------- ค้นหา / เพิ่มจาก ERP ---------------- */
+/** โหลดรายการ All_Mat ทั้งหมด (แบบย่อ) ไปไว้ฝั่ง client → ค้นหา/กรองได้ทันทีโดยไม่เรียก server ซ้ำ
+ *  ธง inWarehouse/inStaging คำนวณฝั่ง client จากข้อมูล RawData1/Staging ที่โหลดอยู่แล้ว */
+function getAllMatList() {
+  return getAllMatList_();
+}
+
+/** เพิ่มหลายรายการจาก ERP เข้า staging พร้อมกัน (กดเลือกก่อน แล้วบันทึกทีเดียว) */
+function addFromErpBatch(codes) {
+  if (typeof codes === 'string') { try { codes = JSON.parse(codes); } catch (e) { codes = [codes]; } }
+  if (!codes || !codes.length) throw new Error('ยังไม่ได้เลือกรายการ');
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var list = getAllMatList_(), byCode = {};
+    for (var i = 0; i < list.length; i++) byCode[list[i].code] = list[i];
+    var existing = {}, whst = [getSheet_(), getStagingSheet_()];
+    for (var w = 0; w < whst.length; w++) { var s = codeSet_(whst[w]); for (var k in s) existing[k] = true; }
+
+    var sh = getStagingSheet_();
+    var startRow = sh.getLastRow() + 1;
+    var rows = [], created = [], logs = [], when = new Date(), who = currentUser_(), skipped = [];
+    for (var c = 0; c < codes.length; c++) {
+      var code = String(codes[c] == null ? '' : codes[c]).trim();
+      if (!code || existing[code] || !byCode[code]) { if (code && existing[code]) skipped.push(code); continue; }
+      existing[code] = true;                       // กันซ้ำภายใน batch เดียวกัน
+      var it = byCode[code], rowNum = startRow + rows.length, no = rowNum - 1;
+      var arr = new Array(MARKER_COL);
+      for (var x = 0; x < MARKER_COL; x++) arr[x] = '';
+      arr[0] = no; arr[1] = code; arr[5] = it.subCat; arr[6] = it.name1;
+      arr[15] = it.unitStore; arr[16] = it.unitBuy; arr[MARKER_COL - 1] = 'WEB';
+      rows.push(arr);
+      logs.push([when, who, rowNum, code, 'เพิ่มจาก ERP → staging', '', code]);
+      created.push({ row: rowNum, no: no, manual: true, code: code, mainDept: '', subDept: '', mainCat: '',
+                     subCat: it.subCat, name1: it.name1, name2: '', image: '', spec: '', brand: '',
+                     weight: '', width: '', length: '', height: '', unitStore: it.unitStore, unitBuy: it.unitBuy,
+                     qty: '', note: '' });
+    }
+    if (rows.length) {
+      sh.getRange(startRow, 1, rows.length, MARKER_COL).setValues(rows);
+      appendLogs_(logs);
+      SpreadsheetApp.flush();
+    }
+    return { added: created, skipped: skipped };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** ---------------- จดรายการที่ยังไม่มีใน ERP (All_Mat) ---------------- */
+/** ชีต ERP_Notes — สร้างอัตโนมัติพร้อมหัวตาราง */
+function getErpNotesSheet_() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sh = ss.getSheetByName(ERP_NOTES_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(ERP_NOTES_SHEET);
+    sh.getRange(1, 1, 1, 9).setValues([['วันที่', 'ผู้บันทึก', 'คำค้น', 'รายละเอียด/ชื่อวัสดุ',
+      'Subgroup (คาดว่า)', 'หน่วย', 'ยี่ห้อ/Spec', 'หมายเหตุ', 'สถานะ']]);
+    sh.setFrozenRows(1);
+    sh.getRange(1, 1, 1, 9).setFontWeight('bold');
+  }
+  return sh;
+}
+
+/** บันทึกโน้ต — ถ้ามีหลายหน่วย จะแยกเป็นหลายแถว (แถวละหน่วย) */
+function addErpNote(payload) {
+  payload = payload || {};
+  var desc = toText_(payload.description);
+  if (!desc) throw new Error('กรุณากรอกรายละเอียด/ชื่อวัสดุ');
+  var units = payload.units;
+  if (typeof units === 'string') { try { units = JSON.parse(units); } catch (e) { units = [units]; } }
+  if (!units || !units.length) units = [toText_(payload.unit)];   // เผื่อส่ง unit เดี่ยว/ว่าง
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var sh = getErpNotesSheet_();
+    var when = new Date(), who = currentUser_(), rows = [];
+    for (var i = 0; i < units.length; i++) {
+      rows.push([when, who, toText_(payload.query), desc, toText_(payload.subgroup),
+        toText_(units[i]), toText_(payload.brandSpec), toText_(payload.note), 'รอเพิ่ม']);
+    }
+    sh.getRange(sh.getLastRow() + 1, 1, rows.length, 9).setValues(rows);
+    SpreadsheetApp.flush();
+    return { ok: true, count: rows.length, savedAt: nowString_() };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** อ่านรายการที่บันทึกไว้ใน ERP_Notes (ใหม่สุดก่อน) */
+function getErpNotes() {
+  var sh = getErpNotesSheet_();
+  var last = sh.getLastRow();
+  if (last < 2) return [];
+  var v = sh.getRange(2, 1, last - 1, 9).getValues();
+  var out = [];
+  for (var i = 0; i < v.length; i++) {
+    var r = v[i];
+    if (!toText_(r[3]) && !toText_(r[2])) continue;   // ข้ามแถวว่าง
+    var dt = r[0], dstr = (dt instanceof Date) ? Utilities.formatDate(dt, 'Asia/Bangkok', 'dd/MM/yyyy HH:mm') : toText_(dt);
+    out.push({ row: i + 2, date: dstr, user: toText_(r[1]), query: toText_(r[2]), description: toText_(r[3]),
+      subgroup: toText_(r[4]), unit: toText_(r[5]), brandSpec: toText_(r[6]), note: toText_(r[7]), status: toText_(r[8]) });
+  }
+  out.reverse();
+  return out;
+}
+
+/** ลบ 1 แถวใน ERP_Notes */
+function deleteErpNote(row) {
+  row = Number(row);
+  if (row < 2) throw new Error('แถวไม่ถูกต้อง');
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var sh = getErpNotesSheet_();
+    if (row > sh.getLastRow()) throw new Error('แถวเกินขอบเขตข้อมูล');
+    sh.deleteRow(row);
+    SpreadsheetApp.flush();
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 /** ---------------- บันทึก 1 แถว (auto-save) + log ---------------- */
 function saveMaterialRow(payload) {
   if (!payload || !payload.row) throw new Error('ไม่มีข้อมูลแถวที่จะบันทึก');
@@ -163,12 +464,12 @@ function saveMaterialRow(payload) {
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    var sh = getSheet_();
+    var sh = sheetFor_(payload.sheetKey);
     if (row > sh.getLastRow()) throw new Error('แถวเกินขอบเขตข้อมูล');
 
-    // อ่านช่วง C..R (3..18) มาก่อน — แก้เฉพาะช่อง editable, คง F/G (อ่านอย่างเดียว) ไว้ (ไม่แตะ marker S)
-    var rng = sh.getRange(row, 3, 1, 16);
-    var old = rng.getValues()[0];           // index 0 = C(3) ... 15 = R(18)
+    // อ่านช่วง C..S (3..19) มาก่อน — แก้เฉพาะช่อง editable, คง F/G (อ่านอย่างเดียว) ไว้ • ไม่แตะ T (marker)
+    var rng = sh.getRange(row, 3, 1, 17);
+    var old = rng.getValues()[0];           // index 0 = C(3) ... 16 = S(19)
     var code = sh.getRange(row, 2).getValue();
 
     var when = new Date(), who = currentUser_(), logs = [];
@@ -195,11 +496,11 @@ function saveMaterialRow(payload) {
 }
 
 /** ---------------- เพิ่มแถวใหม่ (ต่อท้าย) ---------------- */
-function addRow() {
+function addRow(sheetKey) {
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    var sh = getSheet_();
+    var sh = sheetFor_(sheetKey);
     ensureMarkerCol_(sh);
     var newRow = sh.getLastRow() + 1;
     var no = newRow - 1;
@@ -209,7 +510,7 @@ function addRow() {
     return {
       row: newRow, no: no, manual: true, code: '', mainDept: '', subDept: '', mainCat: '', subCat: '',
       name1: '', name2: '', image: '', spec: '', brand: '', weight: '', width: '',
-      length: '', height: '', unitStore: '', unitBuy: '', note: ''
+      length: '', height: '', unitStore: '', unitBuy: '', qty: '', note: ''
     };
   } finally {
     lock.releaseLock();
@@ -217,12 +518,12 @@ function addRow() {
 }
 
 /** ---------------- ลบแถว (สำหรับรายการที่เพิ่มใหม่) ---------------- */
-function deleteRow(row) {
+function deleteRow(row, sheetKey) {
   row = Number(row);
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    var sh = getSheet_();
+    var sh = sheetFor_(sheetKey);
     if (row < FIRST_DATA_ROW || row > sh.getLastRow()) throw new Error('แถวไม่ถูกต้อง');
     var code = sh.getRange(row, 2).getValue();
     sh.deleteRow(row);
@@ -247,14 +548,14 @@ function saveNewRow(payload) {
     { col: 12, key: 'weight',    type: 'num'  }, { col: 13, key: 'width',    type: 'num'  },
     { col: 14, key: 'length',    type: 'num'  }, { col: 15, key: 'height',   type: 'num'  },
     { col: 16, key: 'unitStore', type: 'text' }, { col: 17, key: 'unitBuy',  type: 'text' },
-    { col: 18, key: 'note',      type: 'text' }
+    { col: 18, key: 'qty',       type: 'num'  }, { col: 19, key: 'note',     type: 'text' }
   ];
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    var sh = getSheet_();
+    var sh = sheetFor_(payload.sheetKey);
     if (row > sh.getLastRow()) throw new Error('แถวเกินขอบเขตข้อมูล');
-    var rng = sh.getRange(row, 2, 1, 17);     // B..R (ไม่แตะ marker S)
+    var rng = sh.getRange(row, 2, 1, 18);     // B..S (ไม่แตะ T = marker)
     var old = rng.getValues()[0];
     var code = toText_(payload.code) || sh.getRange(row, 2).getValue();
     var when = new Date(), who = currentUser_(), logs = [], arr = old.slice();
@@ -287,7 +588,7 @@ function uploadImage(payload) {
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    var sh = getSheet_();
+    var sh = sheetFor_(payload.sheetKey);
     if (row <= sh.getLastRow()) {
       var oldUrl = sh.getRange(row, IMAGE_COL).getValue();
       var code = sh.getRange(row, 2).getValue();
