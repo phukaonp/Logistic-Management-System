@@ -417,23 +417,24 @@
               <th class="idx">No.</th>
               <th class="combo-col">ข้อมูลวัสดุ<span class="sub">B · F · G</span></th>
               <th class="code-col col-cde">Material Code<span class="sub">B</span></th>
-              <th>MainDept<span class="sub">C · กรอกได้</span></th>
-              <th>SubDept<span class="sub">D · หลายค่า</span></th>
-              <th>MainCat<span class="sub">E · กรอกได้</span></th>
               <th class="col-cde">SubCat<span class="sub">F</span></th>
               <th class="col-cde">Material Name (1)<span class="sub">G</span></th>
-              <th>Material Name (2)<span class="sub">H · กรอกได้</span></th>
-              <th>Image<span class="sub">I · กรอกได้</span></th>
-              <th>Spec<span class="sub">J · กรอกได้</span></th>
-              <th>Brand<span class="sub">K · กรอกได้</span></th>
-              <th>น้ำหนัก/ชิ้น<span class="sub">L · Kg</span></th>
-              <th>กว้าง<span class="sub">M · mm</span></th>
+              <th>MainDept<span class="sub">C · กรอกได้</span></th>
+              <th>SubDept<span class="sub">D · หลายค่า</span></th>
               <th>ยาว<span class="sub">N · mm</span></th>
+              <th>กว้าง<span class="sub">M · mm</span></th>
               <th>สูง<span class="sub">O · mm</span></th>
-              <th>หน่วยเก็บ<span class="sub">P · IC</span></th>
-              <th>หน่วยซื้อ<span class="sub">Q · PO</span></th>
+              <th>น้ำหนัก<span class="sub">L · Kg</span></th>
+              <th>On product/Package<span class="sub">T · เลือก</span></th>
+              <th>รูปภาพ<span class="sub">I · กรอกได้</span></th>
               <th>จำนวน<span class="sub">R · กรอกได้</span></th>
               <th>Note<span class="sub">S · กรอกได้</span></th>
+              <th>Material Name (2)<span class="sub">H · กรอกได้</span></th>
+              <th>Brand<span class="sub">K · กรอกได้</span></th>
+              <th>Spec<span class="sub">J · กรอกได้</span></th>
+              <th>หน่วยเก็บ<span class="sub">P · IC</span></th>
+              <th>หน่วยซื้อ<span class="sub">Q · PO</span></th>
+              <th>MainCat<span class="sub">E · กรอกได้</span></th>
             </tr>
           </thead>
           <tbody id="tbody"></tbody>
@@ -477,9 +478,9 @@
       var comboActive = null;       // id ของ combobox ที่เมนูกำลังเปิดอยู่
       var newRows = {};   // row -> true (รายการที่เพิ่มใหม่ในเซสชันนี้ — แก้ identity/ลบได้)
       var LOOKUPS = { depts: [], mainCats: [], units: [] };
-      var EDIT_FIELDS = ['mainDept','subDept','mainCat','name2','image','spec','brand','weight','width','length','height','unitStore','unitBuy','qty','note'];
-      var CHOICE_SRC = { mainDept:'depts', subDept:'depts', mainCat:'mainCats' };
-      var CHOICE_MULTI = { mainDept:false, subDept:true, mainCat:false };
+      var EDIT_FIELDS = ['mainDept','subDept','mainCat','name2','image','spec','brand','weight','width','length','height','unitStore','unitBuy','qty','note','onPkg'];
+      var CHOICE_SRC = { mainDept:'depts', subDept:'depts', mainCat:'mainCats', onPkg:'productPackage' };
+      var CHOICE_MULTI = { mainDept:false, subDept:true, mainCat:false, onPkg:false };
       // สีแผนก (ตามภาพ) — ผู้ใช้กดเปลี่ยนได้ เก็บถาวรฝั่ง server
       var DEFAULT_DEPT_COLORS = { 'Flow Hub':'#d9ead3','Fabric':'#ead1dc','Main Elec':'#cfe2f3','Crane':'#fce5cd','Electrical':'#fff2cc','M/C&vehicle':'#f4cccc' };
       var DEPT_COLORS = {};
@@ -496,14 +497,15 @@
         palette:'<svg class="ic" '+SVGA+'><path d="M12 3a9 9 0 1 0 0 18c1 0 1.7-.8 1.7-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.1 0-.9.8-1.7 1.7-1.7H17a4 4 0 0 0 4-4c0-4.4-4-8.3-9-8.3z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10.5" cy="7" r="1"/><circle cx="14.5" cy="7" r="1"/><circle cx="17" cy="11" r="1"/></svg>'
       };
 
-      var COL_COUNT = 20;
-      var COLW = {1:46,2:300,3:140,4:130,5:160,6:150,7:150,8:260,9:200,10:120,11:180,12:120,13:80,14:80,15:80,16:80,17:110,18:110,19:90,20:200};
+      var COL_COUNT = 21;
+      var COLW = {1:46,2:300,3:140,4:150,5:260,6:130,7:160,8:80,9:80,10:80,11:80,12:150,13:120,14:90,15:200,16:200,17:120,18:180,19:110,20:110,21:150};
       var COL_NAMES = {}, spCol = null;
 
       // ---------- โหลด ----------
       window.addEventListener('load', function(){
         google.script.run
           .withSuccessHandler(function(lk){ LOOKUPS = lk || {depts:[],mainCats:[],units:[]};
+            LOOKUPS.productPackage = ['Product','Package'];   // ตัวเลือกคงที่ของ On product/Package
             DEPT_COLORS={}; for(var k in DEFAULT_DEPT_COLORS) DEPT_COLORS[k]=DEFAULT_DEPT_COLORS[k];
             var saved=LOOKUPS.deptColors||{}; for(var s2 in saved) if(saved[s2]) DEPT_COLORS[s2]=saved[s2];
             applyDeptColorCss(); loadMaterials(); })
@@ -901,23 +903,24 @@
           + idxTd(m, isNew)
           + comboTd(m)
           + (isNew ? editTd(m.row,'code',m.code,'code-col col-cde') : roTd(m.code,'code-col col-cde'))
-          + choiceTd(m.row,'mainDept',m.mainDept)
-          + choiceTd(m.row,'subDept',m.subDept)
-          + choiceTd(m.row,'mainCat',m.mainCat)
           + (isNew ? editTd(m.row,'subCat',m.subCat,'col-cde') : roTd(m.subCat,'col-cde'))
           + (isNew ? editTd(m.row,'name1',m.name1,'col-cde') : roTd(m.name1,'name-cell col-cde'))
-          + editTd(m.row,'name2',m.name2,'wide')
-          + imageTd(m.row,m.image)
-          + editTd(m.row,'spec',m.spec,'wide')
-          + editTd(m.row,'brand',m.brand,'')
-          + editTd(m.row,'weight',m.weight,'narrow',true)
-          + editTd(m.row,'width',m.width,'narrow',true)
+          + choiceTd(m.row,'mainDept',m.mainDept)
+          + choiceTd(m.row,'subDept',m.subDept)
           + editTd(m.row,'length',m.length,'narrow',true)
+          + editTd(m.row,'width',m.width,'narrow',true)
           + editTd(m.row,'height',m.height,'narrow',true)
-          + editTd(m.row,'unitStore',m.unitStore,'')
-          + editTd(m.row,'unitBuy',m.unitBuy,'')
+          + editTd(m.row,'weight',m.weight,'narrow',true)
+          + choiceTd(m.row,'onPkg',m.onPkg)
+          + imageTd(m.row,m.image)
           + editTd(m.row,'qty',m.qty,'narrow',true)
           + editTd(m.row,'note',m.note,'wide')
+          + editTd(m.row,'name2',m.name2,'wide')
+          + editTd(m.row,'brand',m.brand,'')
+          + editTd(m.row,'spec',m.spec,'wide')
+          + editTd(m.row,'unitStore',m.unitStore,'')
+          + editTd(m.row,'unitBuy',m.unitBuy,'')
+          + choiceTd(m.row,'mainCat',m.mainCat)
           + '</tr>';
       }
       function roTd(v,cls){ return '<td class="ro '+(cls||'')+'"><span class="cell" title="'+esc(v)+'">'+esc(v)+'</span></td>'; }
