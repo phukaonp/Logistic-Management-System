@@ -19,9 +19,10 @@
  *   O(15) สูง (mm)      [แก้ได้ • ตัวเลข]
  *   P(16) หน่วยเก็บ (IC) [แก้ได้]
  *   Q(17) หน่วยซื้อ (PO) [แก้ได้]
- *   R(18) จำนวน          [แก้ได้ • ตัวเลข]   (เพิ่ม 2026-06-23)
- *   S(19) Note           [แก้ได้]            (เพิ่ม 2026-06-23)
- *   T(20) _web marker    [ภายใน • ค่า "WEB"] (ย้ายจาก R เดิม)
+ *   R(18) จำนวน          [แก้ได้ • ตัวเลข]
+ *   S(19) Note           [แก้ได้]
+ *   T(20) On product/Package [แก้ได้ • dropdown: Product / Package]  (2026-06-24)
+ *   U(21) _web marker    [ภายใน • ค่า "WEB"] (ย้ายจาก R→T→U)
  */
 
 var SPREADSHEET_ID = '1FtoQo1BptJ3QnJxULZ-VZ130n0IKqNaV2XznCeo4kJE';
@@ -32,14 +33,16 @@ var UNITS_SHEET = 'Units';        // หน่วย (คอลัมน์ B = 
 var IMAGE_FOLDER_ID = '1CVDBgTgMbs9cHcC4yrJf2DKmrXD0bx4W';
 var LOG_SHEET_NAME = '_EditLog';
 var FIRST_DATA_ROW = 2;
-var TOTAL_COLUMNS = 19;     // A..S (คอลัมน์ข้อมูลที่กรอก)
+var TOTAL_COLUMNS = 20;     // A..T (คอลัมน์ข้อมูลที่กรอก) • U = marker ภายใน
 var IMAGE_COL = 9;          // I
 var QTY_COL = 18;           // R — จำนวน (แก้ได้ • ตัวเลข)
 var NOTE_COL = 19;          // S — Note (แก้ได้ • ข้อความ)
-var MARKER_COL = 20;        // T — ทำเครื่องหมายแถวที่เพิ่มเองผ่านเว็บ (ค่า "WEB") • ย้ายจาก R เดิม
+var ONPKG_COL = 20;         // T — On product/Package (แก้ได้ • dropdown Product/Package)
+var MARKER_COL = 21;        // U — ทำเครื่องหมายแถวที่เพิ่มเองผ่านเว็บ (ค่า "WEB") • ย้ายจาก T เดิม
 
 // ----- เมนู "เพิ่มจาก ERP" -----
 var STAGING_SHEET = 'DT1.1.1_Staging';  // ชีตพักรายการที่เพิ่มจาก ERP (โครงสร้าง A..R เหมือน DT1.1.1)
+var NEWITEMS_SHEET = 'รายการใหม่';       // ชีตเพิ่มรายการใหม่เอง (โครงสร้าง A..U เหมือน RawData1)
 var ALLMAT_SHEET  = 'All_Mat';          // ข้อมูลวัสดุทั้งหมดจาก ERP
 var ERP_NOTES_SHEET = 'ERP_Notes';      // ชีตจดรายการที่ "ยังไม่มีใน ERP/All_Mat" (รอเพิ่มเข้า ERP)
 var ALLMAT_CACHE_KEY = 'allmat_v1';     // cache รายการ All_Mat (แบบย่อ) เพื่อค้นหาเร็ว
@@ -70,14 +73,15 @@ var EDITABLE = [
   { key: 'unitStore', col: 16, label: 'หน่วยเก็บ (P)',          type: 'text' },
   { key: 'unitBuy',   col: 17, label: 'หน่วยซื้อ (Q)',          type: 'text' },
   { key: 'qty',       col: 18, label: 'จำนวน (R)',              type: 'num'  },
-  { key: 'note',      col: 19, label: 'Note (S)',               type: 'text' }
+  { key: 'note',      col: 19, label: 'Note (S)',               type: 'text' },
+  { key: 'onPkg',     col: 20, label: 'On product/Package (T)', type: 'text' }
 ];
 
 /** ---------------- Web App ---------------- */
 function doGet() {
   try { getLogSheet_(); } catch (e) {}
   try { ensureMarkerCol_(getSheet_()); } catch (e) {}
-  try { maybeMigrateRST_(); } catch (e) {}   // ย้ายโครงสร้าง R→T อัตโนมัติครั้งเดียว
+  try { maybeMigrateColumns_(); } catch (e) {}   // จัดโครงสร้างคอลัมน์อัตโนมัติครั้งเดียว
   return HtmlService.createTemplateFromFile('Index')
     .evaluate()
     .setTitle('BPI Product Data')
@@ -95,9 +99,11 @@ function getSheet_() {
   return sh;
 }
 
-/** เลือกชีตปลายทางตาม key ('staging' = ชีตพัก, อื่น ๆ = DT1.1.1) */
+/** เลือกชีตปลายทางตาม key ('staging' = ชีตพัก, 'newitems' = รายการใหม่, อื่น ๆ = DT1.1.1) */
 function sheetFor_(sheetKey) {
-  return (sheetKey === 'staging') ? getStagingSheet_() : getSheet_();
+  if (sheetKey === 'staging') return getStagingSheet_();
+  if (sheetKey === 'newitems') return getNewItemsSheet_();
+  return getSheet_();
 }
 
 /** ชีตพัก (staging) — สร้างอัตโนมัติถ้ายังไม่มี โดยก็อปหัวตาราง A..R จาก DT1.1.1 */
@@ -116,11 +122,28 @@ function getStagingSheet_() {
   return sh;
 }
 
-/** ให้แน่ใจว่ามีคอลัมน์ R(จำนวน) S(Note) T(_web marker) ครบ + หัวตาราง */
+/** ชีต "รายการใหม่" — สร้างอัตโนมัติถ้ายังไม่มี โดยก็อปหัวตาราง A..U จาก RawData1 (โครงสร้างเดียวกัน) */
+function getNewItemsSheet_() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sh = ss.getSheetByName(NEWITEMS_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(NEWITEMS_SHEET);
+    var src = getSheet_();
+    var width = Math.max(MARKER_COL, src.getLastColumn());
+    sh.getRange(1, 1, 1, width).setValues(src.getRange(1, 1, 1, width).getValues());
+    sh.setFrozenRows(1);
+    sh.getRange(1, 1, 1, width).setFontWeight('bold');
+  }
+  ensureMarkerCol_(sh);
+  return sh;
+}
+
+/** ให้แน่ใจว่ามีคอลัมน์ R(จำนวน) S(Note) T(On product/Package) U(_web marker) ครบ + หัวตาราง */
 function ensureMarkerCol_(sh) {
   if (sh.getMaxColumns() < MARKER_COL) sh.insertColumnsAfter(sh.getMaxColumns(), MARKER_COL - sh.getMaxColumns());
   ensureHeader_(sh, QTY_COL, 'จำนวน');
   ensureHeader_(sh, NOTE_COL, 'Note');
+  ensureHeader_(sh, ONPKG_COL, 'On product/Package');
   ensureHeader_(sh, MARKER_COL, '_web');
 }
 /** ตั้งหัวคอลัมน์เฉพาะเมื่อยังว่าง (ไม่ทับของเดิม) */
@@ -128,11 +151,11 @@ function ensureHeader_(sh, col, label) {
   if (!String(sh.getRange(1, col).getValue()).trim()) sh.getRange(1, col).setValue(label);
 }
 
-/** ---------------- ย้ายโครงสร้าง: marker _web จาก R(18) → T(20) + เพิ่ม R(จำนวน) S(Note) ----------------
- *  ย้ายเฉพาะเซลล์คอลัมน์ R ที่มีค่า "WEB" (marker เดิม) ไป T แล้วล้าง R — ปลอดภัยกับข้อมูลจำนวน (ตัวเลข)
- *  รันซ้ำได้ (idempotent): รอบถัดไปจะไม่เจอ "WEB" ใน R อีก จึงไม่ย้ายซ้ำ
+/** ---------------- จัดโครงสร้างคอลัมน์ให้เป็นเลย์เอาต์ปัจจุบัน (R/S/T + marker U) ----------------
+ *  marker "WEB" อาจอยู่ R(18) [เลย์เอาต์ดั้งเดิม] หรือ T(20) [เลย์เอาต์รอบก่อน] → ย้ายไป U(21)
+ *  ย้ายเฉพาะเซลล์ที่ค่า == "WEB" จึงปลอดภัยกับจำนวน(ตัวเลข)/Product/Package • รันซ้ำได้ (idempotent)
  *  เรียกเองได้ใน editor ตอน setup หรือปล่อยให้ doGet เรียกอัตโนมัติครั้งแรก */
-function migrateColumnsRST() {
+function migrateColumns() {
   var ss = SpreadsheetApp.openById(SPREADSHEET_ID), out = [];
   [SHEET_NAME, STAGING_SHEET].forEach(function(name) {
     var sh = ss.getSheetByName(name);
@@ -141,22 +164,29 @@ function migrateColumnsRST() {
     var last = sh.getLastRow(), moved = 0;
     if (last >= FIRST_DATA_ROW) {
       var n = last - FIRST_DATA_ROW + 1;
-      var rCol = sh.getRange(FIRST_DATA_ROW, QTY_COL, n, 1).getValues();    // R เดิม (อาจมี marker)
-      var tCol = sh.getRange(FIRST_DATA_ROW, MARKER_COL, n, 1).getValues(); // T ปลายทาง
-      var chR = false, chT = false;
+      var rCol = sh.getRange(FIRST_DATA_ROW, QTY_COL,   n, 1).getValues();  // R (เดิมอาจเป็น marker)
+      var tCol = sh.getRange(FIRST_DATA_ROW, ONPKG_COL, n, 1).getValues();  // T (เดิมอาจเป็น marker)
+      var uCol = sh.getRange(FIRST_DATA_ROW, MARKER_COL,n, 1).getValues();  // U ปลายทาง
+      var chR = false, chT = false, chU = false;
       for (var i = 0; i < n; i++) {
-        if (String(rCol[i][0]).trim().toUpperCase() === 'WEB') {           // ย้ายเฉพาะค่า marker
-          if (!String(tCol[i][0]).trim()) { tCol[i][0] = 'WEB'; chT = true; }
+        if (String(rCol[i][0]).trim().toUpperCase() === 'WEB') {
+          if (!String(uCol[i][0]).trim()) { uCol[i][0] = 'WEB'; chU = true; }
           rCol[i][0] = ''; chR = true; moved++;
         }
+        if (String(tCol[i][0]).trim().toUpperCase() === 'WEB') {
+          if (!String(uCol[i][0]).trim()) { uCol[i][0] = 'WEB'; chU = true; }
+          tCol[i][0] = ''; chT = true; moved++;
+        }
       }
-      if (chT) sh.getRange(FIRST_DATA_ROW, MARKER_COL, n, 1).setValues(tCol);
-      if (chR) sh.getRange(FIRST_DATA_ROW, QTY_COL, n, 1).setValues(rCol);
+      if (chU) sh.getRange(FIRST_DATA_ROW, MARKER_COL, n, 1).setValues(uCol);
+      if (chR) sh.getRange(FIRST_DATA_ROW, QTY_COL,   n, 1).setValues(rCol);
+      if (chT) sh.getRange(FIRST_DATA_ROW, ONPKG_COL, n, 1).setValues(tCol);
     }
-    sh.getRange(1, QTY_COL).setValue('จำนวน');    // ตั้งหัวให้ตรงโครงสร้างใหม่
+    sh.getRange(1, QTY_COL).setValue('จำนวน');             // ตั้งหัวให้ตรงโครงสร้างใหม่
     sh.getRange(1, NOTE_COL).setValue('Note');
+    sh.getRange(1, ONPKG_COL).setValue('On product/Package');
     sh.getRange(1, MARKER_COL).setValue('_web');
-    out.push(name + ': ย้าย marker ' + moved + ' แถว → T, ตั้งหัว R/S/T เรียบร้อย');
+    out.push(name + ': ย้าย marker ' + moved + ' แถว → U(21), ตั้งหัว R/S/T/U เรียบร้อย');
   });
   SpreadsheetApp.flush();
   var msg = out.join('\n');
@@ -164,16 +194,16 @@ function migrateColumnsRST() {
   return msg;
 }
 
-/** เรียกจาก doGet — ย้ายโครงสร้างอัตโนมัติ "ครั้งเดียว" (กันด้วย Script Property + lock) */
-function maybeMigrateRST_() {
+/** เรียกจาก doGet — จัดโครงสร้างอัตโนมัติ "ครั้งเดียว" (กันด้วย Script Property + lock) */
+function maybeMigrateColumns_() {
   var props = PropertiesService.getScriptProperties();
-  if (props.getProperty('migratedRST') === '1') return;
+  if (props.getProperty('migratedV2') === '1') return;
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(5000)) return;        // ได้ล็อกไม่ทัน — รอบหน้าค่อยทำ
   try {
-    if (props.getProperty('migratedRST') === '1') return;
-    migrateColumnsRST();
-    props.setProperty('migratedRST', '1');
+    if (props.getProperty('migratedV2') === '1') return;
+    migrateColumns();
+    props.setProperty('migratedV2', '1');
   } catch (e) {
     // ปล่อยให้รอบถัดไปลองใหม่
   } finally {
@@ -214,7 +244,8 @@ function getMaterials(sheetKey) {
       unitStore: r[15],  // P
       unitBuy: r[16],    // Q
       qty: r[17],        // R จำนวน
-      note: r[18]        // S Note
+      note: r[18],       // S Note
+      onPkg: r[19]       // T On product/Package
     });
   }
   return out;
@@ -367,7 +398,7 @@ function addFromErpBatch(codes) {
       created.push({ row: rowNum, no: no, manual: true, code: code, mainDept: '', subDept: '', mainCat: '',
                      subCat: it.subCat, name1: it.name1, name2: '', image: '', spec: '', brand: '',
                      weight: '', width: '', length: '', height: '', unitStore: it.unitStore, unitBuy: it.unitBuy,
-                     qty: '', note: '' });
+                     qty: '', note: '', onPkg: '' });
     }
     if (rows.length) {
       sh.getRange(startRow, 1, rows.length, MARKER_COL).setValues(rows);
@@ -387,10 +418,12 @@ function getErpNotesSheet_() {
   var sh = ss.getSheetByName(ERP_NOTES_SHEET);
   if (!sh) {
     sh = ss.insertSheet(ERP_NOTES_SHEET);
-    sh.getRange(1, 1, 1, 9).setValues([['วันที่', 'ผู้บันทึก', 'คำค้น', 'รายละเอียด/ชื่อวัสดุ',
-      'Subgroup (คาดว่า)', 'หน่วย', 'ยี่ห้อ/Spec', 'หมายเหตุ', 'สถานะ']]);
+    sh.getRange(1, 1, 1, 10).setValues([['วันที่', 'ผู้บันทึก', 'คำค้น', 'รายละเอียด/ชื่อวัสดุ',
+      'Subgroup (คาดว่า)', 'หน่วย', 'ยี่ห้อ/Spec', 'หมายเหตุ', 'สถานะ', 'รูปภาพ']]);
     sh.setFrozenRows(1);
-    sh.getRange(1, 1, 1, 9).setFontWeight('bold');
+    sh.getRange(1, 1, 1, 10).setFontWeight('bold');
+  } else if (!String(sh.getRange(1, 10).getValue()).trim()) {
+    sh.getRange(1, 10).setValue('รูปภาพ');   // ensure หัว Col.J (รูปภาพ) ให้ชีตเดิม
   }
   return sh;
 }
@@ -403,6 +436,17 @@ function addErpNote(payload) {
   var units = payload.units;
   if (typeof units === 'string') { try { units = JSON.parse(units); } catch (e) { units = [units]; } }
   if (!units || !units.length) units = [toText_(payload.unit)];   // เผื่อส่ง unit เดี่ยว/ว่าง
+
+  // อัปโหลดรูป (ถ้าแนบมา) → ได้ลิงก์ไปเก็บ Col.J ของทุกแถวที่สร้าง (ทำนอก lock เพราะช้า)
+  var imageUrl = '';
+  if (payload.imageBase64) {
+    var bytes = Utilities.base64Decode(payload.imageBase64);
+    var blob = Utilities.newBlob(bytes, payload.mimeType || 'image/jpeg', payload.filename || 'erpnote.jpg');
+    var file = getImageFolder_().createFile(blob);
+    try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}
+    imageUrl = 'https://drive.google.com/file/d/' + file.getId() + '/view';
+  }
+
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
@@ -410,11 +454,11 @@ function addErpNote(payload) {
     var when = new Date(), who = currentUser_(), rows = [];
     for (var i = 0; i < units.length; i++) {
       rows.push([when, who, toText_(payload.query), desc, toText_(payload.subgroup),
-        toText_(units[i]), toText_(payload.brandSpec), toText_(payload.note), 'รอเพิ่ม']);
+        toText_(units[i]), toText_(payload.brandSpec), toText_(payload.note), 'รอเพิ่ม', imageUrl]);
     }
-    sh.getRange(sh.getLastRow() + 1, 1, rows.length, 9).setValues(rows);
+    sh.getRange(sh.getLastRow() + 1, 1, rows.length, 10).setValues(rows);
     SpreadsheetApp.flush();
-    return { ok: true, count: rows.length, savedAt: nowString_() };
+    return { ok: true, count: rows.length, savedAt: nowString_(), image: imageUrl };
   } finally {
     lock.releaseLock();
   }
@@ -425,14 +469,14 @@ function getErpNotes() {
   var sh = getErpNotesSheet_();
   var last = sh.getLastRow();
   if (last < 2) return [];
-  var v = sh.getRange(2, 1, last - 1, 9).getValues();
+  var v = sh.getRange(2, 1, last - 1, 10).getValues();
   var out = [];
   for (var i = 0; i < v.length; i++) {
     var r = v[i];
     if (!toText_(r[3]) && !toText_(r[2])) continue;   // ข้ามแถวว่าง
     var dt = r[0], dstr = (dt instanceof Date) ? Utilities.formatDate(dt, 'Asia/Bangkok', 'dd/MM/yyyy HH:mm') : toText_(dt);
     out.push({ row: i + 2, date: dstr, user: toText_(r[1]), query: toText_(r[2]), description: toText_(r[3]),
-      subgroup: toText_(r[4]), unit: toText_(r[5]), brandSpec: toText_(r[6]), note: toText_(r[7]), status: toText_(r[8]) });
+      subgroup: toText_(r[4]), unit: toText_(r[5]), brandSpec: toText_(r[6]), note: toText_(r[7]), status: toText_(r[8]), image: toText_(r[9]) });
   }
   out.reverse();
   return out;
@@ -467,9 +511,9 @@ function saveMaterialRow(payload) {
     var sh = sheetFor_(payload.sheetKey);
     if (row > sh.getLastRow()) throw new Error('แถวเกินขอบเขตข้อมูล');
 
-    // อ่านช่วง C..S (3..19) มาก่อน — แก้เฉพาะช่อง editable, คง F/G (อ่านอย่างเดียว) ไว้ • ไม่แตะ T (marker)
-    var rng = sh.getRange(row, 3, 1, 17);
-    var old = rng.getValues()[0];           // index 0 = C(3) ... 16 = S(19)
+    // อ่านช่วง C..T (3..20) มาก่อน — แก้เฉพาะช่อง editable, คง F/G (อ่านอย่างเดียว) ไว้ • ไม่แตะ U (marker)
+    var rng = sh.getRange(row, 3, 1, 18);
+    var old = rng.getValues()[0];           // index 0 = C(3) ... 17 = T(20)
     var code = sh.getRange(row, 2).getValue();
 
     var when = new Date(), who = currentUser_(), logs = [];
@@ -510,7 +554,7 @@ function addRow(sheetKey) {
     return {
       row: newRow, no: no, manual: true, code: '', mainDept: '', subDept: '', mainCat: '', subCat: '',
       name1: '', name2: '', image: '', spec: '', brand: '', weight: '', width: '',
-      length: '', height: '', unitStore: '', unitBuy: '', qty: '', note: ''
+      length: '', height: '', unitStore: '', unitBuy: '', qty: '', note: '', onPkg: ''
     };
   } finally {
     lock.releaseLock();
@@ -548,14 +592,15 @@ function saveNewRow(payload) {
     { col: 12, key: 'weight',    type: 'num'  }, { col: 13, key: 'width',    type: 'num'  },
     { col: 14, key: 'length',    type: 'num'  }, { col: 15, key: 'height',   type: 'num'  },
     { col: 16, key: 'unitStore', type: 'text' }, { col: 17, key: 'unitBuy',  type: 'text' },
-    { col: 18, key: 'qty',       type: 'num'  }, { col: 19, key: 'note',     type: 'text' }
+    { col: 18, key: 'qty',       type: 'num'  }, { col: 19, key: 'note',     type: 'text' },
+    { col: 20, key: 'onPkg',     type: 'text' }
   ];
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
     var sh = sheetFor_(payload.sheetKey);
     if (row > sh.getLastRow()) throw new Error('แถวเกินขอบเขตข้อมูล');
-    var rng = sh.getRange(row, 2, 1, 18);     // B..S (ไม่แตะ T = marker)
+    var rng = sh.getRange(row, 2, 1, 19);     // B..T (ไม่แตะ U = marker)
     var old = rng.getValues()[0];
     var code = toText_(payload.code) || sh.getRange(row, 2).getValue();
     var when = new Date(), who = currentUser_(), logs = [], arr = old.slice();
