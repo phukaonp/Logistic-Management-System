@@ -328,6 +328,38 @@
         .en-cancel{flex:1}
         .en-save{flex:2}
       }
+      /* ---- หน้า "บันทึกรายการใหม่" (notes) ---- */
+      .notes-panel{flex:1;overflow:auto;padding:12px 14px;display:flex;flex-direction:column;gap:10px;background:var(--card)}
+      .notes-panel .en-tabs{flex:0 0 auto;max-width:420px}
+      .notes-panel .en-view{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:8px}
+      #enFormView{max-width:680px}
+      .en-imgrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+      .en-img-btn{font-family:inherit;font-size:14px;padding:9px 14px;border:1px dashed var(--brand);border-radius:8px;background:#eef4ff;color:var(--brand);font-weight:600;cursor:pointer}
+      .en-img-btn:hover{background:#e0ebff}
+      .en-img-preview{display:inline-flex;align-items:center;gap:8px}
+      .en-img-preview img{height:46px;width:auto;max-width:120px;border-radius:6px;border:1px solid var(--line);object-fit:cover}
+      .en-img-rm{cursor:pointer;color:#9aa3b2;font-weight:700;font-size:18px;line-height:1;padding:0 4px}
+      .en-img-rm:hover{color:var(--err)}
+      .en-list-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+      .en-table-wrap{flex:1 1 auto;overflow:auto;border:1px solid var(--line);border-radius:8px}
+      table.notes-table{border-collapse:separate;border-spacing:0;width:100%}
+      table.notes-table td{padding:7px 10px;vertical-align:middle;white-space:nowrap;max-width:340px;overflow:hidden;text-overflow:ellipsis}
+      table.notes-table .img-thumb{height:38px;width:auto;max-width:80px;border-radius:6px;border:1px solid var(--line);object-fit:cover;display:block}
+      @media (max-width:760px),(hover:none){
+        .notes-panel{padding:8px 10px}
+        .en-img-btn{font-size:15px;padding:11px 14px}
+      }
+      /* ซ่อน Material Code + SubCat เฉพาะแท็บ "รายการใหม่" */
+      #grid.ni-mode .code-col,#grid.ni-mode .subcat-col{display:none}
+      /* Lightbox ดูรูปใหญ่ */
+      .img-lightbox{position:fixed;top:0;left:0;right:0;bottom:0;z-index:100;display:flex;align-items:center;justify-content:center}
+      .img-lightbox .lb-backdrop{position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(15,23,42,.72)}
+      .img-lightbox .lb-box{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:12px;max-width:94vw;max-height:94vh}
+      .img-lightbox .lb-img{max-width:94vw;max-height:82vh;border-radius:10px;background:#fff;box-shadow:0 12px 44px rgba(0,0,0,.45);object-fit:contain}
+      .img-lightbox .lb-actions{display:flex;gap:10px}
+      .img-lightbox .lb-actions button{font-family:inherit;font-size:14px;padding:9px 18px;border-radius:8px;cursor:pointer;border:1px solid rgba(255,255,255,.5)}
+      .lb-change{background:var(--brand);color:#fff;border-color:var(--brand)!important}
+      .lb-close{background:#fff;color:var(--ink)}
     </style>
     <style id="colStyle"></style>
     <style id="deptColorCss"></style>
@@ -337,6 +369,7 @@
       <div class="tabs">
         <button class="tab active" type="button" data-tab="main">ตรวจสอบ RawData1</button>
         <button class="tab" type="button" data-tab="staging">เพิ่มจาก ERP → Staging</button>
+        <button class="tab" type="button" data-tab="newitems">รายการใหม่</button>
       </div>
       <div id="erpPanel" class="erp-panel hide">
         <div class="erp-srow">
@@ -359,33 +392,6 @@
           </div>
         </div>
         <div id="erpResults" class="erp-results"></div>
-        <button id="erpNoteToggle" class="erp-note-toggle" type="button">＋ ไม่มีใน ERP? บันทึกรายการรอเพิ่ม</button>
-        <div id="erpNotePanel" class="erp-note hide">
-          <div class="erp-note-head"><span>📝 รายการที่ยังไม่มีใน ERP (All_Mat) — ชีต ERP_Notes</span><button id="enClose" class="en-close" type="button" title="ปิด">✕</button></div>
-          <div class="en-tabs">
-            <button id="enTabAdd" class="en-tab active" type="button">✏️ เพิ่มใหม่</button>
-            <button id="enTabList" class="en-tab" type="button">📋 ที่บันทึกไว้</button>
-          </div>
-          <div id="enFormView" class="en-view">
-            <input id="enDesc" class="en-f" type="text" placeholder="รายละเอียด / ชื่อวัสดุ *">
-            <div class="en-row">
-              <div class="combo"><input id="enSub" class="combo-input" type="text" autocomplete="off" placeholder="Subgroup (คาดว่า)"><span class="combo-caret">▾</span></div>
-              <div class="combo"><input id="enUnit" class="combo-input" type="text" autocomplete="off" placeholder="หน่วย (เลือก/พิมพ์ได้หลายหน่วย)"><span class="combo-caret">▾</span></div>
-            </div>
-            <div id="enUnitChips" class="unit-chips hide"></div>
-            <input id="enBrand" class="en-f" type="text" placeholder="ยี่ห้อ / Spec">
-            <textarea id="enNote" class="en-f" rows="2" placeholder="หมายเหตุ"></textarea>
-            <div class="en-foot">
-              <span id="enMsg" class="en-msg"></span>
-              <button id="enCancel" class="en-cancel" type="button">ปิด</button>
-              <button id="enSave" class="en-save" type="button">บันทึกโน้ต</button>
-            </div>
-          </div>
-          <div id="enListView" class="en-view hide">
-            <div class="en-list-head"><span id="enListCount" class="en-list-count"></span><button id="enListRefresh" class="en-list-refresh" type="button">⟳ รีเฟรช</button></div>
-            <div id="enList"></div>
-          </div>
-        </div>
       </div>
       <div class="toolbar">
         <h1><svg class="ic hicon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3.3 7.5L12 12.5l8.7-5M12 12.5V22"/></svg>BPI Product Data</h1>
@@ -417,7 +423,7 @@
               <th class="idx">No.</th>
               <th class="combo-col">ข้อมูลวัสดุ<span class="sub">B · F · G</span></th>
               <th class="code-col col-cde">Material Code<span class="sub">B</span></th>
-              <th class="col-cde">SubCat<span class="sub">F</span></th>
+              <th class="col-cde subcat-col">SubCat<span class="sub">F</span></th>
               <th class="col-cde">Material Name (1)<span class="sub">G</span></th>
               <th>MainDept<span class="sub">C · กรอกได้</span></th>
               <th>SubDept<span class="sub">D · หลายค่า</span></th>
@@ -446,6 +452,14 @@
     <div id="choicePopup" class="choice-popup hide"></div>
     <div id="cellTip" class="cell-tip"></div>
     <input id="imgFile" type="file" accept="image/*" class="visually-hidden">
+    <button id="addRowFab" class="fab hide" type="button" title="เพิ่มรายการใหม่ (แถวเปล่า)"></button>
+    <div id="imgLightbox" class="img-lightbox hide">
+      <div class="lb-backdrop"></div>
+      <div class="lb-box">
+        <img class="lb-img" src="" alt="รูปตัวอย่าง">
+        <div class="lb-actions"><button class="lb-change" type="button">เปลี่ยนรูป</button><button class="lb-close" type="button">ปิด</button></div>
+      </div>
+    </div>
     <div id="sizePanel" class="size-panel hide">
       <div class="sp-head">ปรับขนาด: <b id="spName"></b></div>
       <div class="sp-presets"><button type="button" data-w="90">เล็ก</button><button type="button" data-w="160">กลาง</button><button type="button" data-w="280">ใหญ่</button></div>
@@ -469,8 +483,8 @@
       var ALLMAT_LOADED = false, ALLMAT_LOADING = false;
       var ERP_PAGE_SIZE = 10;       // จำนวนรายการต่อหน้า ERP (ผู้ใช้เลือกได้)
       var erpPage = 1, ERP_MATCHED = [];   // หน้าปัจจุบัน + ผลค้นหาทั้งหมด (อ้างอิง)
-      var enDescDirty = false;      // ผู้ใช้แก้ช่อง "รายละเอียด" ในฟอร์มโน้ตเองหรือยัง (กันเขียนทับ)
-      var enUnits = [];             // หน่วยที่เลือกในฟอร์มโน้ต (หลายหน่วย → บันทึกแยกแถว)
+      var activeTab = 'main';       // แท็บที่เปิด (main/staging/newitems) — แยกจาก CURRENT_SHEET ที่ใช้เฉพาะกริด
+      var COLLAPSED_BY_TAB = { main:true, staging:true, newitems:false };   // มุมมองต่อแท็บ (true=ยุบ, false=แยกคอลัมน์) — newitems เปิดแบบแยกคอลัมน์
       var SUBGROUP_SET = {}, ALLMAT_SUBLIST = [];   // เซ็ต + รายชื่อ Subgroup (ไว้กรอง exact + เมนูเลือก)
       // ----- pagination กริด (RawData1/Staging) + เซ็ตตัวกรอง -----
       var GRID_PAGE_SIZE = 50, gridPage = 1, GRID_MATCHED = [];   // 'all' = แสดงทั้งหมด
@@ -559,10 +573,16 @@
         window.addEventListener('beforeunload', function(e){ if(Object.keys(pending).length||Object.keys(dirty).length){ e.preventDefault(); e.returnValue=''; } });
 
         document.getElementById('imgFile').addEventListener('change', onImgFile);
+        var lb=document.getElementById('imgLightbox');
+        lb.querySelector('.lb-backdrop').addEventListener('click', closeImgLightbox);
+        lb.querySelector('.lb-close').addEventListener('click', closeImgLightbox);
+        lb.querySelector('.lb-change').addEventListener('click', function(){ var r=lb._row; closeImgLightbox(); if(r!=null) pickImage(r); });
+        document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeImgLightbox(); });
 
         applyViewMode();
-        document.getElementById('viewToggle').addEventListener('click', function(){ document.getElementById('grid').classList.toggle('mode-collapsed'); applyViewMode(); });
+        document.getElementById('viewToggle').addEventListener('click', function(){ var c=document.getElementById('grid').classList.toggle('mode-collapsed'); COLLAPSED_BY_TAB[activeTab]=c; applyViewMode(); });
         document.getElementById('refreshBtn').addEventListener('click', refreshData);
+        var addFab=document.getElementById('addRowFab'); addFab.innerHTML=ICON.plus; addFab.addEventListener('click', addNewRow);
         var dcBtn=document.getElementById('deptColorBtn'); dcBtn.innerHTML=ICON.palette;
         dcBtn.addEventListener('click', openDeptColorPanel);
         document.getElementById('dcpList').addEventListener('input', onDcpColorInput);
@@ -593,18 +613,6 @@
           if(x){ delete erpSelected[x.closest('.erp-chip').getAttribute('data-code')]; erpRenderTray(); erpFilter(); return; }
           if(e.target.closest('#erpSaveBtn')) erpSave();
         });
-        document.getElementById('erpNoteToggle').addEventListener('click', erpToggleNote);
-        document.getElementById('enCancel').addEventListener('click', erpHideNote);
-        document.getElementById('enClose').addEventListener('click', erpHideNote);
-        document.getElementById('enSave').addEventListener('click', erpSaveNote);
-        document.getElementById('enDesc').addEventListener('input', function(){ enDescDirty=(this.value.trim()!==''); });
-        wireCombo('enSub'); wireCombo('enUnit');   // Subgroup + หน่วย เป็น combobox เหมือนตัวกรอง
-        document.getElementById('enTabAdd').addEventListener('click', function(){ enSwitchTab('add'); });
-        document.getElementById('enTabList').addEventListener('click', function(){ enSwitchTab('list'); });
-        document.getElementById('enListRefresh').addEventListener('click', enLoadList);
-        document.getElementById('enUnit').addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); addEnUnit(this.value); closeCombo(); } });
-        document.getElementById('enUnitChips').addEventListener('click', function(e){ var x=e.target.closest('.unit-chip-x'); if(!x) return; enUnits=enUnits.filter(function(u){ return u!==x.closest('.unit-chip').getAttribute('data-u'); }); renderEnUnitChips(); });
-        document.getElementById('enList').addEventListener('click', function(e){ var d=e.target.closest('.en-note-del'); if(!d) return; var card=d.closest('.en-note-card'); enDeleteNote(Number(card.getAttribute('data-row')), card); });
 
         SHEET_DATA[CURRENT_SHEET]=MATERIALS;   // เก็บ cache ชีตแรก (main)
         preloadAllMat();                        // โหลด All_Mat ไว้เบื้องหลังตั้งแต่เปิดแอป
@@ -613,17 +621,27 @@
       }
 
       // ---------- แท็บ (สลับไว ด้วย client cache) ----------
+      function isGridTab(t){ return t==='main'||t==='staging'||t==='newitems'; }
       function switchTab(which){
-        if(which===CURRENT_SHEET) return;
-        if(Object.keys(pending).length||Object.keys(dirty).length){ if(!confirm('ยังมีรายการที่กำลังบันทึก/ยังไม่บันทึก — สลับแท็บเลยไหม?')) return; }
-        SHEET_DATA[CURRENT_SHEET]=MATERIALS;   // เก็บสถานะแท็บปัจจุบันไว้ก่อนสลับ
-        CURRENT_SHEET=which;
+        if(which===activeTab) return;
+        var leavingGrid=isGridTab(activeTab), goingGrid=isGridTab(which);
+        if(leavingGrid && (Object.keys(pending).length||Object.keys(dirty).length)){ if(!confirm('ยังมีรายการที่กำลังบันทึก/ยังไม่บันทึก — สลับแท็บเลยไหม?')) return; }
+        if(leavingGrid) SHEET_DATA[CURRENT_SHEET]=MATERIALS;   // เก็บสถานะกริดก่อนสลับ
+        activeTab=which;
         var tabs=document.querySelectorAll('.tab');
         for(var i=0;i<tabs.length;i++) tabs[i].classList.toggle('active', tabs[i].getAttribute('data-tab')===which);
         document.getElementById('erpPanel').classList.toggle('hide', which!=='staging');
-        if(SHEET_DATA[which]) paintGrid(SHEET_DATA[which], false);   // มี cache → สลับทันที
-        else { showGridLoading(); reloadGrid(null, null, false); }   // โหลดครั้งแรกของชีตนี้
-        if(which==='staging'){ preloadAllMat(); erpFilter(); }       // เตรียม/แสดงผลค้นหา ERP
+        document.getElementById('addRowFab').classList.toggle('hide', which!=='newitems');
+        document.getElementById('grid').classList.toggle('ni-mode', which==='newitems');   // ซ่อน Material Code + SubCat เฉพาะแท็บนี้
+        document.querySelector('.toolbar').classList.toggle('hide', !goingGrid);
+        document.querySelector('.table-wrap').classList.toggle('hide', !goingGrid);
+        if(goingGrid){
+          CURRENT_SHEET=which;
+          document.getElementById('grid').classList.toggle('mode-collapsed', !!COLLAPSED_BY_TAB[which]); applyViewMode();   // เปิดมุมมองตามที่จำไว้ของแท็บ
+          if(SHEET_DATA[which]) paintGrid(SHEET_DATA[which], false);   // มี cache → สลับทันที
+          else { showGridLoading(); reloadGrid(null, null, false); }   // โหลดครั้งแรกของชีตนี้
+          if(which==='staging'){ preloadAllMat(); erpFilter(); }       // เตรียม/แสดงผลค้นหา ERP
+        }
       }
       function showGridLoading(){
         document.getElementById('grid').classList.add('hide');
@@ -638,11 +656,11 @@
           .withSuccessHandler(function(list){
             ALLMAT_ALL=list||[]; ALLMAT_LOADED=true; ALLMAT_LOADING=false;
             buildSubFilter();
-            if(CURRENT_SHEET==='staging') erpFilter();
+            if(activeTab==='staging') erpFilter();
           })
           .withFailureHandler(function(err){
             ALLMAT_LOADING=false;
-            if(CURRENT_SHEET==='staging') document.getElementById('erpResults').innerHTML='<div class="erp-empty err">โหลด All_Mat ไม่สำเร็จ: '+(err&&err.message?err.message:err)+'</div>';
+            if(activeTab==='staging') document.getElementById('erpResults').innerHTML='<div class="erp-empty err">โหลด All_Mat ไม่สำเร็จ: '+(err&&err.message?err.message:err)+'</div>';
           })
           .getAllMatList();
       }
@@ -658,9 +676,7 @@
         filterDept:   { all:'แผนก: ทั้งหมด',    opts:function(){ return LOOKUPS.depts||[]; },    on:applyFilters },
         filterCat:    { all:'หมวด: ทั้งหมด',     opts:function(){ return LOOKUPS.mainCats||[]; }, on:applyFilters },
         filterSubCat: { all:'SubCat: ทั้งหมด',   opts:function(){ return GRID_SUBCATS; },          on:applyFilters },
-        erpSubFilter: { all:'— ทุก Subgroup —',  opts:function(){ return ALLMAT_SUBLIST; },        on:erpFilter },
-        enSub:        { all:'— ไม่ระบุ —',        opts:function(){ return ALLMAT_SUBLIST; },        on:function(){} },
-        enUnit:       { all:'— เลือกหน่วย —',     opts:function(){ return LOOKUPS.units||[]; },     on:function(){}, pick:function(v){ addEnUnit(v); } }
+        erpSubFilter: { all:'— ทุก Subgroup —',  opts:function(){ return ALLMAT_SUBLIST; },        on:erpFilter }
       };
       function comboMenuHtml(id, filter){
         var cfg=COMBO_CFG[id], opts=cfg.opts()||[], cur=(document.getElementById(id).value||'').trim();
@@ -726,8 +742,7 @@
           ERP_MATCHED.push(it);
         }
         erpPage=1;
-        erpRenderPage();
-        if(ERP_MATCHED.length===0) erpShowNote(true);   // ไม่พบใน All_Mat → เปิดฟอร์มจดอัตโนมัติ (เติมคำค้นให้)
+        erpRenderPage();   // ถ้าไม่พบ erpRender จะโชว์ปุ่มไปแท็บ "บันทึกรายการใหม่" ให้เอง
       }
       // วาดหน้าปัจจุบัน + อัปเดตปุ่ม pagination
       function erpRenderPage(){
@@ -803,108 +818,16 @@
           .addFromErpBatch(JSON.stringify(codes));
       }
 
-      // ---------- ฟอร์มจดรายการที่ไม่มีใน ERP ----------
-      function erpShowNote(prefill){
-        document.getElementById('erpNotePanel').classList.remove('hide');
-        document.getElementById('erpNoteToggle').classList.add('hide');
-        document.getElementById('erpResults').classList.add('hide');   // ซ่อนผลค้นหา → ฟอร์มได้พื้นที่เต็ม
-        enSwitchTab('add');
-        if(prefill && !enDescDirty){ document.getElementById('enDesc').value=(document.getElementById('erpSearch').value||'').trim(); }
-      }
-      function erpHideNote(){
-        document.getElementById('erpNotePanel').classList.add('hide');
-        document.getElementById('erpNoteToggle').classList.remove('hide');
-        document.getElementById('erpResults').classList.remove('hide');
-        document.getElementById('enMsg').textContent='';
-      }
-      function erpToggleNote(){
-        if(document.getElementById('erpNotePanel').classList.contains('hide')) erpShowNote(true); else erpHideNote();
-      }
-      function enSwitchTab(which){
-        var add=(which!=='list');
-        document.getElementById('enTabAdd').classList.toggle('active', add);
-        document.getElementById('enTabList').classList.toggle('active', !add);
-        document.getElementById('enFormView').classList.toggle('hide', !add);
-        document.getElementById('enListView').classList.toggle('hide', add);
-        if(!add) enLoadList();
-      }
-      // ----- หลายหน่วย (chip) -----
-      function addEnUnit(u){ u=String(u||'').trim(); if(!u) return; if(enUnits.indexOf(u)===-1) enUnits.push(u); document.getElementById('enUnit').value=''; renderEnUnitChips(); }
-      function renderEnUnitChips(){
-        var box=document.getElementById('enUnitChips');
-        box.innerHTML=enUnits.map(function(u){ return '<span class="unit-chip" data-u="'+esc(u)+'">'+esc(u)+'<span class="unit-chip-x" title="เอาออก">×</span></span>'; }).join('');
-        box.classList.toggle('hide', enUnits.length===0);
-      }
-      function erpSaveNote(){
-        var desc=document.getElementById('enDesc').value.trim(), msg=document.getElementById('enMsg');
-        if(!desc){ msg.className='en-msg err'; msg.textContent='กรุณากรอกรายละเอียด/ชื่อวัสดุ'; document.getElementById('enDesc').focus(); return; }
-        var typed=document.getElementById('enUnit').value.trim(); if(typed) addEnUnit(typed);   // หน่วยที่พิมพ์ค้างไว้
-        var units=enUnits.slice();
-        var btn=document.getElementById('enSave'); btn.disabled=true;
-        msg.className='en-msg'; msg.textContent='กำลังบันทึก…';
-        var payload={ query:document.getElementById('erpSearch').value, description:desc,
-          subgroup:document.getElementById('enSub').value, units:units,
-          brandSpec:document.getElementById('enBrand').value, note:document.getElementById('enNote').value };
-        google.script.run
-          .withSuccessHandler(function(res){
-            btn.disabled=false; var n=(res&&res.count)||1;
-            msg.className='en-msg'; msg.textContent='✓ บันทึกแล้ว '+n+' รายการ';
-            ['enDesc','enSub','enUnit','enBrand','enNote'].forEach(function(id){ document.getElementById(id).value=''; });
-            enUnits=[]; renderEnUnitChips(); enDescDirty=false;
-            showMsg('ok','บันทึกรายการรอเพิ่มใน ERP แล้ว '+n+' รายการ');
-          })
-          .withFailureHandler(function(err){ btn.disabled=false; msg.className='en-msg err'; msg.textContent='บันทึกไม่สำเร็จ: '+(err&&err.message?err.message:err); })
-          .addErpNote(payload);
-      }
-      // ----- รายการที่บันทึกไว้ -----
-      function enLoadList(){
-        var box=document.getElementById('enList'); box.innerHTML='<div class="en-empty">กำลังโหลด…</div>';
-        document.getElementById('enListCount').textContent='';
-        google.script.run
-          .withSuccessHandler(enRenderList)
-          .withFailureHandler(function(err){ box.innerHTML='<div class="en-empty">โหลดไม่สำเร็จ: '+(err&&err.message?err.message:err)+'</div>'; })
-          .getErpNotes();
-      }
-      function enRenderList(list){
-        list=list||[]; var box=document.getElementById('enList');
-        document.getElementById('enListCount').textContent=list.length.toLocaleString()+' รายการ';
-        if(!list.length){ box.innerHTML='<div class="en-empty">ยังไม่มีรายการที่บันทึกไว้</div>'; return; }
-        var h='';
-        for(var i=0;i<list.length;i++){ var n=list[i];
-          var meta=[n.subgroup, n.unit, n.brandSpec].filter(Boolean).map(esc).join(' · ');
-          h+='<div class="en-note-card" data-row="'+n.row+'">'
-            +'<span class="en-note-del" title="ลบ">×</span>'
-            +'<div class="en-note-desc">'+esc(n.description||'(ไม่มีรายละเอียด)')+'</div>'
-            +(meta?'<div class="en-note-meta">'+meta+'</div>':'')
-            +(n.note?'<div class="en-note-meta">📝 '+esc(n.note)+'</div>':'')
-            +'<div class="en-note-foot"><span class="en-status">'+esc(n.status||'รอเพิ่ม')+'</span><span>'+esc(n.date)+'</span><span>'+esc(n.user)+'</span></div>'
-            +'</div>';
-        }
-        box.innerHTML=h;
-      }
-      function enDeleteNote(row, card){
-        if(!confirm('ลบรายการนี้ออกจาก ERP_Notes?')) return;
-        google.script.run
-          .withSuccessHandler(function(){
-            if(card&&card.parentNode) card.parentNode.removeChild(card);
-            var left=document.querySelectorAll('#enList .en-note-card').length;
-            document.getElementById('enListCount').textContent=left.toLocaleString()+' รายการ';
-            if(!left) document.getElementById('enList').innerHTML='<div class="en-empty">ยังไม่มีรายการที่บันทึกไว้</div>';
-            showMsg('ok','ลบรายการแล้ว');
-          })
-          .withFailureHandler(function(err){ showMsg('err','ลบไม่สำเร็จ: '+(err&&err.message?err.message:err)); })
-          .deleteErpNote(row);
-      }
-
       // ---------- render เซลล์ ----------
       function rowHtml(m){
-        var isNew = !!m.manual;   // แถวที่เพิ่มเองผ่านเว็บ (จำถาวรด้วย marker) — แก้ identity/ลบได้
+        var isNew = !!m.manual;   // แถวที่เพิ่มเองผ่านเว็บ (จำถาวรด้วย marker) — ใช้ไฮไลต์แถวใหม่
+        var canEdit = isNew || CURRENT_SHEET==='newitems';   // แท็บ "รายการใหม่": แก้ identity + ลบได้ทุกแถว
         return '<tr data-row="'+m.row+'"'+(isNew?' class="new-row"':'')+'>'
-          + idxTd(m, isNew)
+          + idxTd(m, canEdit)
           + comboTd(m)
-          + (isNew ? editTd(m.row,'code',m.code,'code-col col-cde') : roTd(m.code,'code-col col-cde'))
-          + (isNew ? editTd(m.row,'subCat',m.subCat,'col-cde') : roTd(m.subCat,'col-cde'))
-          + (isNew ? editTd(m.row,'name1',m.name1,'col-cde') : roTd(m.name1,'name-cell col-cde'))
+          + (canEdit ? editTd(m.row,'code',m.code,'code-col col-cde') : roTd(m.code,'code-col col-cde'))
+          + (canEdit ? editTd(m.row,'subCat',m.subCat,'col-cde subcat-col') : roTd(m.subCat,'col-cde subcat-col'))
+          + (canEdit ? editTd(m.row,'name1',m.name1,'col-cde') : roTd(m.name1,'name-cell col-cde'))
           + choiceTd(m.row,'mainDept',m.mainDept)
           + choiceTd(m.row,'subDept',m.subDept)
           + editTd(m.row,'length',m.length,'narrow',true)
@@ -924,8 +847,8 @@
           + '</tr>';
       }
       function roTd(v,cls){ return '<td class="ro '+(cls||'')+'"><span class="cell" title="'+esc(v)+'">'+esc(v)+'</span></td>'; }
-      function idxTd(m, isNew){
-        if(isNew) return '<td class="idx idx-new" data-delrow="'+m.row+'" title="แตะเพื่อลบรายการนี้"><span class="idx-no">'+esc(m.no)+'</span><span class="idx-del">'+ICON.trash+'</span></td>';
+      function idxTd(m, deletable){
+        if(deletable) return '<td class="idx idx-new" data-delrow="'+m.row+'" title="แตะเพื่อลบรายการนี้"><span class="idx-no">'+esc(m.no)+'</span><span class="idx-del">'+ICON.trash+'</span></td>';
         return '<td class="idx">'+esc(m.no)+'</td>';
       }
       function editTd(row,field,v,cls,num){ return '<td class="edit '+(cls||'')+'"><input data-field="'+field+'" value="'+esc(v)+'"'+(num?' inputmode="decimal"':'')+'></td>'; }
@@ -956,6 +879,16 @@
       function thumbUrl(u){ var id=driveId(u); return id?('https://lh3.googleusercontent.com/d/'+id+'=w200'):u; }
       function viewImageUrl(u){ var id=driveId(u); return id?('https://lh3.googleusercontent.com/d/'+id+'=w1600'):u; }
 
+      // ---------- ดูรูปใหญ่ (lightbox) ----------
+      function openImgLightbox(row){
+        var url=BY_ROW[row]?String(BY_ROW[row].image||'').trim():'';
+        if(!url) return;   // ไม่มีรูป → ไม่ต้องเปิด
+        var lb=document.getElementById('imgLightbox');
+        lb.querySelector('.lb-img').src=viewImageUrl(url);
+        lb._row=row; lb.classList.remove('hide');
+      }
+      function closeImgLightbox(){ var lb=document.getElementById('imgLightbox'); lb.classList.add('hide'); lb.querySelector('.lb-img').src=''; lb._row=null; }
+
       // ---------- แก้ไข / auto-save ----------
       function onEdit(e){
         var inp=e.target; if(!inp||inp.tagName!=='INPUT')return;
@@ -974,7 +907,7 @@
         updateStatus();
       }
       function saveRow(row){
-        var m=BY_ROW[row], payload={row:row, sheetKey:CURRENT_SHEET}, isNew=!!(m&&m.manual);
+        var m=BY_ROW[row], payload={row:row, sheetKey:CURRENT_SHEET}, isNew=!!(m&&m.manual)||CURRENT_SHEET==='newitems';
         EDIT_FIELDS.forEach(function(f){ payload[f]=m[f]; });
         if(isNew){ payload.code=m.code; payload.subCat=m.subCat; payload.name1=m.name1; }
         var tr=document.querySelector('tr[data-row="'+row+'"]');
@@ -1001,6 +934,8 @@
         if(nameCell){ e.stopPropagation(); if(!touchRecently) showCellTip(nameCell); return; }
         var imgx=e.target.closest('.img-x');
         if(imgx){ e.stopPropagation(); var cx=imgx.closest('.img-cell'); removeImage(Number(cx.getAttribute('data-imgrow')),cx); return; }
+        var thumb=e.target.closest('.img-thumb');
+        if(thumb){ e.stopPropagation(); var tc=thumb.closest('.img-cell'); openImgLightbox(Number(tc.getAttribute('data-imgrow'))); return; }   // คลิกรูป → ดูภาพใหญ่
         var imgcell=e.target.closest('.img-cell');
         if(imgcell){ e.stopPropagation(); pickImage(Number(imgcell.getAttribute('data-imgrow'))); return; }
         var chipx=e.target.closest('.chip-x');
@@ -1219,6 +1154,22 @@
           .withSuccessHandler(function(){ reloadGrid('ลบรายการแล้ว', null, true); })
           .withFailureHandler(function(err){ showMsg('err','ลบไม่สำเร็จ: '+(err&&err.message?err.message:err)); })
           .deleteRow(row, CURRENT_SHEET);
+      }
+      // เพิ่มแถวเปล่า (แท็บ "รายการใหม่") → เด้งแถว + โฟกัสให้กรอกได้ทันที
+      function addNewRow(){
+        var fab=document.getElementById('addRowFab'); fab.disabled=true;
+        google.script.run
+          .withSuccessHandler(function(m){
+            fab.disabled=false;
+            newRows[m.row]=true; MATERIALS.push(m); BY_ROW[m.row]=m; SHEET_DATA[CURRENT_SHEET]=MATERIALS;
+            document.getElementById('tbody').insertAdjacentHTML('beforeend', rowHtml(m));
+            applyFilters();
+            gridPage=(GRID_PAGE_SIZE==='all')?1:Math.max(1,Math.ceil(GRID_MATCHED.length/GRID_PAGE_SIZE)); renderGridPage();
+            requestAnimationFrame(function(){ var tr=document.querySelector('tr[data-row="'+m.row+'"]'); if(!tr) return; tr.scrollIntoView({block:'center'}); var ins=tr.querySelectorAll('td.edit input'); for(var k=0;k<ins.length;k++){ if(ins[k].offsetParent!==null){ ins[k].focus(); break; } } });
+            showMsg('ok','เพิ่มแถวใหม่แล้ว — กรอกข้อมูลได้เลย');
+          })
+          .withFailureHandler(function(err){ fab.disabled=false; showMsg('err','เพิ่มแถวไม่สำเร็จ: '+(err&&err.message?err.message:err)); })
+          .addRow(CURRENT_SHEET);
       }
 
       // ---------- ปรับความกว้างคอลัมน์ ----------
